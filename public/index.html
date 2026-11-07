@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risiko LAN</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top" hidden>
+  <strong>🎲 Risiko</strong>
+  <span id="who"></span>
+  <span class="spacer"></span>
+  <button id="btn-admin" class="ghost" hidden>⚙ Admin</button>
+  <button id="btn-logout" class="ghost">Esci</button>
+</header>
+
+<div id="toast" hidden></div>
+
+<section id="login" class="card narrow" hidden>
+  <h1>Risiko</h1>
+  <div class="tabs"><button class="tab on" data-t="p">Giocatore</button><button class="tab" data-t="a">Amministratore</button></div>
+  <form id="form-player">
+    <label>Il tuo nome<input id="in-name" maxlength="20" autocomplete="off" placeholder="es. Marco" required></label>
+    <button class="primary">Entra</button>
+  </form>
+  <form id="form-admin" hidden>
+    <label>Userid<input id="in-user" autocomplete="username" required></label>
+    <label>Password<input id="in-pass" type="password" autocomplete="current-password" required></label>
+    <button class="primary">Accedi come amministratore</button>
+  </form>
+  <p id="login-err" class="err"></p>
+</section>
+
+<section id="lobby" class="card" hidden>
+  <h2>Partite</h2>
+  <form id="form-create" class="row">
+    <input id="in-game" maxlength="30" placeholder="Nome nuova partita (opzionale)">
+    <button class="primary">Crea partita</button>
+  </form>
+  <div id="gamelist"></div>
+</section>
+
+<section id="room" class="card narrow" hidden></section>
+
+<section id="game" hidden>
+  <div id="mapwrap"><svg id="map" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <aside id="side"></aside>
+</section>
+
+<dialog id="admin-dlg">
+  <h2>Pannello amministratore</h2>
+  <div id="admin-body"></div>
+  <div class="row end"><button id="admin-close" class="ghost">Chiudi</button></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

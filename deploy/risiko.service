@@ -1,0 +1,25 @@
+[Unit]
+Description=Risiko LAN
+After=network.target
+
+[Service]
+Type=simple
+User=risiko
+WorkingDirectory=/opt/risiko
+Environment=PORT=3000
+Environment=RISK_DATA_DIR=/var/lib/risiko
+# Opzionale, usate solo al PRIMO avvio per creare l'admin (altrimenti password casuale nel journal):
+# Environment=RISK_ADMIN_USER=admin
+# Environment=RISK_ADMIN_PASSWORD=cambiami
+ExecStart=/usr/bin/node server/server.js
+Restart=always
+RestartSec=2
+StateDirectory=risiko
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
