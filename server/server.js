@@ -63,7 +63,7 @@ const sendTo = (pid, o) => wss.clients.forEach((c) => c.pid === pid && send(c, o
 
 function snapshot(p) {
   const games = Object.values(S.games).map((g) => ({
-    id: g.id, name: g.name, status: g.status, hostId: g.hostId, max: game.MAX_PLAYERS,
+    id: g.id, name: g.name, status: g.status, hostId: g.hostId, max: game.MAX_PLAYERS, min: game.MIN_PLAYERS,
     players: g.players.map((x) => ({ id: x.id, name: x.name })),
   }));
   const g = p.gameId && S.games[p.gameId];
@@ -73,7 +73,16 @@ function snapshot(p) {
   }
   return msg;
 }
+// Se il difensore non è collegato non si può aspettare la sua scelta: difende con il massimo dei dadi.
+function autoDefend() {
+  for (const g of Object.values(S.games)) {
+    for (let n = 0; n < 20 && g.status === 'playing' && g.phase === 'defend' && g.pa && !online(g.pa.defender); n++) {
+      game.act(g, g.pa.defender, { a: 'defend', dice: game.maxDefDice(g) });
+    }
+  }
+}
 function broadcast() {
+  autoDefend();
   save();
   wss.clients.forEach((c) => { const p = c.pid && S.players[c.pid]; if (p) send(c, snapshot(p)); });
 }

@@ -1,7 +1,7 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
-const PHASES = { setup: 'Piazzamento iniziale', reinforce: 'Rinforzi', attack: 'Attacco', conquer: 'Conquista', fortify: 'Spostamento', finished: 'Fine partita' };
-const KIND = ['Fanteria', 'Cavalleria', 'Artiglieria', 'Jolly'];
+const PHASES = { colors: 'Scelta del colore', defend: 'Difesa', setup: 'Piazzamento iniziale', reinforce: 'Rinforzi', attack: 'Attacco', conquer: 'Conquista', fortify: 'Spostamento', finished: 'Fine partita' };
+const KIND = ['Fante', 'Cavaliere', 'Cannone', 'Jolly'];
 const KIND_ICON = ['🪖', '🐎', '💣', '🃏'];
 
 function h(tag, props, ...kids) {
@@ -89,10 +89,10 @@ function renderLobby() {
 
 function renderRoom(g) {
   const host = g.hostId === S.me.id, r = clear($('#room'));
-  r.append(h('h2', {}, g.name), h('p', { class: 'mut' }, 'Sala d\'attesa — servono da 2 a 4 giocatori.'),
-    ...g.players.map((p) => h('div', { class: 'pl' }, h('span', { class: 'chip', style: `background:${p.color}` }), p.name, p.id === g.hostId ? ' 👑' : '')),
+  r.append(h('h2', {}, g.name), h('p', { class: 'mut' }, `Sala d'attesa — da ${g.min} a ${g.max} giocatori.`),
+    ...g.players.map((p) => h('div', { class: 'pl' }, h('span', { class: 'chip', style: `background:${p.color || '#777'}` }), p.name, p.id === g.hostId ? ' 👑' : '')),
     h('div', { class: 'btns' },
-      host && h('button', { class: 'primary', disabled: g.players.length < 2, onclick: () => send({ type: 'startGame' }) }, 'Avvia partita'),
+      host && h('button', { class: 'primary', disabled: g.players.length < g.min, onclick: () => send({ type: 'startGame' }) }, 'Avvia partita'),
       h('button', { onclick: () => send({ type: 'leaveGame' }) }, 'Esci dalla sala'),
       host && h('button', { class: 'danger', onclick: () => send({ type: 'cancelGame' }) }, 'Annulla partita')));
 }
@@ -203,6 +203,7 @@ function buildMap() {
   setView(); mapBuilt = true;
 }
 
+function amDefender(g) { return g.status === 'playing' && g.phase === 'defend' && g.pa && g.pa.defender === S.me.id; }
 function myTurn(g) { const p = g.players[g.turn]; return g.status === 'playing' && p && p.id === S.me.id; }
 const adj = {};
 function targets(g) {
@@ -210,19 +211,23 @@ function targets(g) {
   if (!sel.from) return out;
   const near = adj[sel.from] || [];
   if (g.phase === 'attack') near.forEach((t) => g.terr[t].owner !== S.me.id && out.add(t));
+  if (g.phase === 'fortify') near.forEach((t) => g.terr[t].owner === S.me.id && out.add(t)); // spostamento: solo territori contigui
   return out;
 }
 
 function renderMap(g) {
   const tg = targets(g), mine = myTurn(g);
   const col = Object.fromEntries(g.players.map((p) => [p.id, p.color]));
-  const attacking = mine && g.phase === 'attack' && sel.from;
+  const attacking = mine && (g.phase === 'attack' || g.phase === 'fortify') && sel.from;
   for (const id in nodes) {
     const t = g.terr[id], nd = nodes[id];
     nd.c.setAttribute('fill', t.owner ? col[t.owner] : '#8a8f98');
+    nd.g.style.display = t.armies ? '' : 'none'; // prima della distribuzione non ci sono pedine
     nd.n.textContent = t.armies; nd.n.setAttribute('class', 'tn' + (t.armies > 99 ? ' s3' : t.armies > 9 ? ' s2' : ''));
-    const isSel = sel.from === id, isTgt = sel.to === id || tg.has(id);
-    nd.hl.setAttribute('class', 'hl' + (isSel ? ' sel' : isTgt ? (sel.to === id ? ' tgt pick' : ' tgt') : ''));
+    const pa = g.phase === 'defend' ? g.pa : null; // attacco in corso: lo vedono tutti
+    const isSel = pa ? pa.from === id : sel.from === id, isTgt = pa ? pa.to === id : sel.to === id || tg.has(id);
+    const isPick = pa ? pa.to === id : sel.to === id;
+    nd.hl.setAttribute('class', 'hl' + (isSel ? ' sel' : isTgt ? (isPick ? ' tgt pick' : ' tgt') : ''));
     nd.land.setAttribute('class', 'land' + (attacking && !isSel && !isTgt ? ' dim' : ''));
     nd.g.setAttribute('transform', `translate(${nd.x},${nd.y})${isSel ? ' scale(1.2)' : ''}`);
   }
@@ -239,8 +244,8 @@ function onTerr(id) {
   } else if (g.phase === 'fortify') {
     if (!mineT) return;
     if (sel.from === id) { sel.from = sel.to = null; }
-    else if (!sel.from) { sel.from = id; sel.n = 1; }
-    else { sel.to = id; sel.n = Math.max(1, Math.min(sel.n, g.terr[sel.from].armies - 1)); }
+    else if (sel.from && adj[sel.from].includes(id)) { sel.to = id; sel.n = Math.max(1, Math.min(sel.n, g.terr[sel.from].armies - 1)); }
+    else if (t.armies > 1) { sel.from = id; sel.to = null; sel.n = 1; } // nuovo territorio di partenza
   }
   renderGame(g);
 }
@@ -249,9 +254,10 @@ function onTerr(id) {
 let lastPhaseKey = '';
 function renderGame(g) {
   if (!mapBuilt) return;
-  const key = g.id + g.phase + g.turn;
+  const key = g.id + g.turn + (['attack', 'defend', 'conquer'].includes(g.phase) ? 'combat' : g.phase);
   if (key !== lastPhaseKey) { sel.from = sel.to = null; sel.qty = 1; lastPhaseKey = key; }
   if (sel.from && g.terr[sel.from].owner !== S.me.id) sel.from = sel.to = null;
+  if (sel.to && g.terr[sel.to].owner === S.me.id && g.phase !== 'fortify') sel.to = null; // territorio appena conquistato
   renderMap(g);
   const side = clear($('#side')), cp = g.players[g.turn], mine = myTurn(g);
   const stats = (p) => { let t = 0, a = 0; for (const k in g.terr) if (g.terr[k].owner === p.id) { t++; a += g.terr[k].armies; } return { t, a }; };
@@ -262,7 +268,8 @@ function renderGame(g) {
     const w = g.players.find((p) => p.id === g.winner);
     ban.append(h('div', { class: 'banner' }, `🏆 Vince ${w ? w.name : '—'}!`), h('div', { class: 'mut' }, `${w ? w.name : ''} ${g.winReason || ''}.`));
   } else {
-    ban.append(h('div', { class: 'banner' }, mine ? `Tocca a te — ${PHASES[g.phase]}` : `Turno di ${cp.name} — ${PHASES[g.phase]}`));
+    const defending = amDefender(g);
+    ban.append(h('div', { class: 'banner' }, defending ? 'Ti stanno attaccando!' : mine && g.phase === 'defend' ? 'Attacco in corso' : mine ? `Tocca a te — ${PHASES[g.phase]}` : `Turno di ${cp.name} — ${PHASES[g.phase]}`));
     ban.append(h('div', { class: 'mut' }, hint(g, mine, cp)));
   }
   side.append(ban);
@@ -272,7 +279,7 @@ function renderGame(g) {
   g.players.forEach((p, i) => {
     const s = stats(p);
     pb.append(h('div', { class: 'pl' + (g.status === 'playing' && i === g.turn ? ' turn' : '') + (p.alive ? '' : ' dead') },
-      h('span', { class: 'chip', style: `background:${p.color}` }), h('span', { class: 'n', title: p.colorName }, p.name + (p.id === S.me.id ? ' (tu)' : ''), p.colorName ? h('span', { class: 'mut' }, ` · ${p.colorName}`) : ''),
+      h('span', { class: 'chip', style: `background:${p.color || '#777'}` }), h('span', { class: 'n', title: p.colorName }, p.name + (p.id === S.me.id ? ' (tu)' : ''), p.colorName ? h('span', { class: 'mut' }, ` · ${p.colorName}`) : ''),
       h('span', { class: 'mut', title: 'territori / armate / carte' }, `🗺${s.t} ⚔${s.a} 🂠${p.cardCount}` + (g.phase === 'setup' || (g.phase === 'reinforce' && i === g.turn) ? ` +${p.pool}` : ''))));
   });
   side.append(pb);
@@ -288,7 +295,7 @@ function renderGame(g) {
   }
 
   // azioni
-  if (mine) side.append(actionsBox(g, cp));
+  if (mine || amDefender(g)) side.append(actionsBox(g, cp));
 
   // carte
   const me = g.players.find((p) => p.id === S.me.id);
@@ -317,13 +324,16 @@ function renderGame(g) {
 }
 
 function hint(g, mine, cp) {
-  if (!mine) return 'Attendi il tuo turno.';
+  if (amDefender(g)) return 'Scegli con quanti dadi difendere, prima che l\'attaccante tiri.';
+  if (g.phase === 'defend') return `${cp.name} ha attaccato: attende la scelta dei dadi del difensore.`;
+  if (!mine) return g.phase === 'colors' ? 'Attendi il tuo turno di scelta.' : 'Attendi il tuo turno.';
   switch (g.phase) {
+    case 'colors': return 'Scegli il colore del tuo esercito.';
     case 'setup': return `Clicca un tuo territorio per piazzare 1 armata (ancora ${Math.min(3 - g.setupPlaced, cp.pool)} in questo turno, ${cp.pool} totali).`;
-    case 'reinforce': return `Armate da piazzare: ${cp.pool}. Clicca un tuo territorio.`;
-    case 'attack': return 'Scegli un tuo territorio (≥2 armate), poi un confinante nemico.';
+    case 'reinforce': return `Armate da piazzare: ${cp.pool}. Clicca un tuo territorio. Poi vai all'attacco.`;
+    case 'attack': return 'Scegli un tuo territorio (≥2 armate), poi un confinante nemico (anche via mare, linee tratteggiate).';
     case 'conquer': return 'Territorio conquistato: scegli quante armate spostare.';
-    case 'fortify': return 'Facoltativo: sposta armate tra due tuoi territori collegati, poi il turno finisce.';
+    case 'fortify': return 'Spostamento strategico (uno solo): da un tuo territorio a un tuo territorio contiguo. Poi il turno finisce.';
   }
   return '';
 }
@@ -331,7 +341,17 @@ function hint(g, mine, cp) {
 function actionsBox(g, cp) {
   const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
   const bx = h('div', { class: 'box' }, h('h3', {}, 'Azioni')), bt = h('div', { class: 'btns' });
-  const rr = () => renderGame(S.game);
+  if (g.phase === 'colors') {
+    bx.append(h('div', { class: 'swatches' }, g.colors.filter((c) => g.freeColors.includes(c.key)).map((c) =>
+      h('button', { class: 'swatch', style: `background:${c.hex}`, onclick: () => act({ a: 'color', key: c.key }) }, c.name))));
+    return bx;
+  }
+  if (g.phase === 'defend') {
+    const pa = g.pa, max = Math.min(3, g.terr[pa.to].armies);
+    bx.append(h('div', {}, `${T[pa.from]} attacca ${T[pa.to]} (${g.terr[pa.to].armies} armate) con ${pa.dice} ${pa.dice === 1 ? 'dado' : 'dadi'}.`));
+    if (amDefender(g)) for (let d = 1; d <= max; d++) bt.append(h('button', { class: d === max ? 'primary' : '', onclick: () => act({ a: 'defend', dice: d }) }, `Difendi con ${d}🎲`));
+    bx.append(bt); return bx;
+  }
   if (g.phase === 'reinforce') {
     const max = cp.pool;
     sel.qty = Math.max(1, Math.min(sel.qty, max || 1));
@@ -341,8 +361,7 @@ function actionsBox(g, cp) {
     const f = sel.from && g.terr[sel.from], ok = f && sel.to && f.armies > 1;
     bx.append(h('div', {}, sel.from ? `${T[sel.from]} (${f.armies})` : '—', ' → ', sel.to ? `${T[sel.to]} (${g.terr[sel.to].armies})` : '—'));
     for (const d of [1, 2, 3]) bt.append(h('button', { disabled: !ok || f.armies - 1 < d, onclick: () => act({ a: 'attack', from: sel.from, to: sel.to, dice: d }) }, `Attacca ${d}🎲`));
-    bt.append(h('button', { class: 'primary', disabled: !ok, onclick: () => act({ a: 'blitz', from: sel.from, to: sel.to }) }, 'Blitz'));
-    bt.append(h('button', { onclick: () => act({ a: 'endAttack' }) }, 'Fine attacco'));
+    bt.append(h('button', { class: 'primary', onclick: () => act({ a: 'endAttack' }) }, 'Fine attacco → spostamento'));
     bt.append(h('button', { onclick: () => act({ a: 'endTurn' }) }, 'Passa il turno'));
   } else if (g.phase === 'conquer' && g.pending) {
     const { from, to, min, max } = g.pending;
@@ -363,13 +382,13 @@ function actionsBox(g, cp) {
 
 function cardsBox(g, me, mine) {
   const chosen = new Set(), bx = h('div', { class: 'box' }, h('h3', {}, 'Le tue carte'));
-  const btn = h('button', { class: 'primary', disabled: true, onclick: () => act({ a: 'trade', idx: [...chosen] }) }, 'Gioca tris');
+  const btn = h('button', { class: 'primary', disabled: true, onclick: () => act({ a: 'trade', idx: [...chosen] }) }, g.traded ? 'Tris già giocato' : 'Gioca tris');
   const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
   me.cards.forEach((c, i) => bx.append(h('label', { class: 'card-it' },
-    h('input', { type: 'checkbox', disabled: !(mine && g.phase === 'reinforce'), onchange: (e) => { e.target.checked ? chosen.add(i) : chosen.delete(i); btn.disabled = chosen.size !== 3; } }),
+    h('input', { type: 'checkbox', disabled: !(mine && g.phase === 'reinforce' && !g.traded), onchange: (e) => { e.target.checked ? chosen.add(i) : chosen.delete(i); btn.disabled = chosen.size !== 3; } }),
     `${KIND_ICON[c.k]} ${KIND[c.k]}${c.t ? ' · ' + T[c.t] : ''}`)));
-  bx.append(h('div', { class: 'mut' }, 'Tris: 3 cannoni 4, 3 fanti 6, 3 cavalli 8, uno per tipo 10, jolly + 2 uguali 12. Il jolly vale solo in quest\'ultima combinazione. Con 5+ carte il tris è obbligatorio.'));
-  if (mine && g.phase === 'reinforce') bx.append(h('div', { class: 'btns' }, btn));
+  bx.append(h('div', { class: 'mut' }, 'Un tris per turno: 3 cannoni 4, 3 fanti 6, 3 cavalieri 8, uno per tipo 10, jolly + 2 uguali 12 (il jolly vale solo così). +2 armate per ogni carta del tris che raffigura un territorio che possiedi.'));
+  if (mine && g.phase === 'reinforce' && !g.traded) bx.append(h('div', { class: 'btns' }, btn));
   return bx;
 }
 

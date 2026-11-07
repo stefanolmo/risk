@@ -16,23 +16,25 @@ const client = () => new Promise((res) => {
 });
 (async () => {
   let srv = await start();
-  const [a, b, c, d, e, adm] = await Promise.all([1, 2, 3, 4, 5, 6].map(client));
+  const [a, b, c, d, e, f, g7, adm] = await Promise.all([1, 2, 3, 4, 5, 6, 7, 8].map(client));
   await a.send({ type: 'register', name: 'Anna' }); await b.send({ type: 'register', name: 'Bruno' });
   await c.send({ type: 'register', name: 'Carla' }); await d.send({ type: 'register', name: 'Dario' }); await e.send({ type: 'register', name: 'Elia' });
+  await f.send({ type: 'register', name: 'Fabio' }); await g7.send({ type: 'register', name: 'Gina' });
   await e.send({ type: 'register', name: 'anna' }); assert(e.errs.pop().includes('in uso'), 'nome duplicato online');
   await adm.send({ type: 'adminLogin', user: 'boss', password: 'sbagliata' }); await new Promise((r) => setTimeout(r, 1000)); assert(adm.errs.pop().includes('errate'));
   await adm.send({ type: 'adminLogin', user: 'boss', password: 'segreta1' });
-  assert(adm.last.me.isAdmin && adm.last.admin.players.length === 6);
+  assert(adm.last.me.isAdmin && adm.last.admin.players.length === 8);
   await a.send({ type: 'createGame', name: 'G1' });
   const gid = a.last.me.gameId; assert(gid);
-  for (const x of [b, c, d]) await x.send({ type: 'joinGame', id: gid });
-  await e.send({ type: 'joinGame', id: gid }); assert(e.errs.pop().includes('al completo'), '5° giocatore rifiutato');
   await b.send({ type: 'startGame' }); assert(b.errs.pop().includes('Solo chi'), 'solo host avvia');
+  await a.send({ type: 'startGame' }); assert(a.errs.pop().includes('almeno 3'), 'servono 3 giocatori');
+  for (const x of [b, c, d, e, f]) await x.send({ type: 'joinGame', id: gid });
+  await g7.send({ type: 'joinGame', id: gid }); assert(g7.errs.pop().includes('al completo'), '7° giocatore rifiutato');
   await a.send({ type: 'startGame' });
-  assert.strictEqual(a.last.game.status, 'playing');
+  assert.strictEqual(a.last.game.status, 'playing'); assert.strictEqual(a.last.game.phase, 'colors'); assert.strictEqual(a.last.game.players.length, 6);
   assert(a.last.game.players.every((p) => p.id === a.last.me.id ? p.cards : !p.cards), 'carte altrui nascoste');
   const first = a.last.game.players[a.last.game.turn].id;
-  const mover = [a, b, c, d].find((x) => x.last.me.id !== first);
+  const mover = [a, b, c, d, e, f].find((x) => x.last.me.id !== first);
   await mover.send({ type: 'act', a: 'place', t: 'ala', n: 1 }); assert(mover.errs.pop().includes('turno'), 'turno rispettato');
   await b.send({ type: 'adminKick', id: a.last.me.id }); assert(b.errs.pop().includes('autorizzato'), 'kick solo admin');
   // persistenza: riavvio del server

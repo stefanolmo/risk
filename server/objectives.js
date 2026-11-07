@@ -3,12 +3,12 @@
 const { CONTINENTS, IDS } = require('./map');
 
 const COLOR_DEFS = [
-  { key: 'blu', name: 'Blu', adj: 'blu', hex: '#3b82f6' },
   { key: 'rosso', name: 'Rosso', adj: 'rossa', hex: '#e74c3c' },
-  { key: 'nero', name: 'Nero', adj: 'nera', hex: '#3a3f4b' },
-  { key: 'giallo', name: 'Giallo', adj: 'gialla', hex: '#f1c40f' },
-  { key: 'verde', name: 'Verde', adj: 'verde', hex: '#2ecc71' },
   { key: 'viola', name: 'Viola', adj: 'viola', hex: '#a855f7' },
+  { key: 'giallo', name: 'Giallo', adj: 'gialla', hex: '#f1c40f' },
+  { key: 'verde', name: 'Verde', adj: 'verde', hex: '#2e9e52' },
+  { key: 'blu', name: 'Blu', adj: 'blu', hex: '#3b82f6' },
+  { key: 'nero', name: 'Nero', adj: 'nera', hex: '#3a3f4b' },
 ];
 const CNAME = { na: 'il Nord America', sa: 'il Sud America', eu: 'l\'Europa', af: 'l\'Africa', as: 'l\'Asia', oc: 'l\'Oceania' };
 
