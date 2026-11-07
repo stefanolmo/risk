@@ -101,22 +101,67 @@ function renderRoom(g) {
 const NS = 'http://www.w3.org/2000/svg';
 const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); e.append(...kids); return e; };
 const nodes = {};
+const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 function buildMap() {
   const svg = clear($('#map')), T = Object.fromEntries(MAP.territories.map((t) => [t.id, t]));
-  for (const c of MAP.continents) for (const id of c.terrs || MAP.territories.filter((t) => t.continent === c.id).map((t) => t.id))
-    svg.append(sv('circle', { class: 'halo', cx: T[id].x, cy: T[id].y, r: 62, fill: c.color }));
-  for (const [a, b] of MAP.edges) {
+  const col = Object.fromEntries(MAP.continents.map((c) => [c.id, c.color]));
+  const pts = (t) => 'M' + t.poly.split(' ').join('L') + 'Z';
+  svg.append(sv('defs', {},
+    sv('radialGradient', { id: 'sea', cx: '50%', cy: '45%', r: '75%' }, sv('stop', { offset: '0', 'stop-color': '#2c6f93' }), sv('stop', { offset: '1', 'stop-color': '#173f5c' })),
+    sv('pattern', { id: 'waves', width: 40, height: 20, patternUnits: 'userSpaceOnUse' }, sv('path', { d: 'M0 10 q10 -8 20 0 t20 0', fill: 'none', stroke: '#ffffff', 'stroke-opacity': '.07', 'stroke-width': 1.2 })),
+    sv('radialGradient', { id: 'tokshine', cx: '35%', cy: '30%', r: '70%' }, sv('stop', { offset: '0', 'stop-color': '#fff', 'stop-opacity': '.55' }), sv('stop', { offset: '.5', 'stop-color': '#fff', 'stop-opacity': '0' })),
+    sv('filter', { id: 'shadow', x: '-10%', y: '-10%', width: '120%', height: '125%' }, sv('feDropShadow', { dx: 0, dy: 3, stdDeviation: 3, 'flood-color': '#000', 'flood-opacity': '.5' })),
+    sv('filter', { id: 'tokshadow', x: '-40%', y: '-40%', width: '180%', height: '180%' }, sv('feDropShadow', { dx: 0, dy: 2, stdDeviation: 1.6, 'flood-color': '#000', 'flood-opacity': '.7' }))));
+  // oceano + cornice
+  svg.append(sv('rect', { x: -1500, y: -900, width: 4000, height: 2400, fill: 'url(#sea)' }), sv('rect', { x: -1500, y: -900, width: 4000, height: 2400, fill: 'url(#waves)' }));
+  // collegamenti via mare
+  const sea = sv('g', { class: 'sea' });
+  for (const [a, b] of MAP.seaLinks) {
     const A = T[a], B = T[b];
-    if ((a === 'ala' && b === 'kam') || (a === 'kam' && b === 'ala')) {
-      svg.append(sv('line', { class: 'edge wrap', x1: T.ala.x, y1: T.ala.y, x2: 0, y2: T.ala.y }), sv('line', { class: 'edge wrap', x1: T.kam.x, y1: T.kam.y, x2: 1000, y2: T.kam.y }));
-    } else svg.append(sv('line', { class: 'edge', x1: A.x, y1: A.y, x2: B.x, y2: B.y }));
+    if (a === 'ala' && b === 'kam') { sea.append(sv('line', { x1: 18, y1: 88, x2: -60, y2: 88 }), sv('line', { x1: 950, y1: 110, x2: 1060, y2: 110 })); continue; }
+    sea.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y }));
   }
+  svg.append(sea);
+  // terre
+  const land = sv('g', { filter: 'url(#shadow)' });
   for (const t of MAP.territories) {
-    const c = sv('circle', { r: 22, cx: 0, cy: 0 }), n = sv('text', { class: 'n' }), l = sv('text', { class: 'l', y: 36 }, t.name);
-    const g = sv('g', { class: 'node', transform: `translate(${t.x},${t.y})` }, c, n, l, sv('title', {}, t.name));
-    g.onclick = () => onTerr(t.id);
-    svg.append(g); nodes[t.id] = { g, c, n };
+    const el = sv('path', { class: 'land', d: pts(t), fill: col[t.continent] }, sv('title', {}, t.name));
+    el.onclick = () => onTerr(t.id);
+    land.append(el); nodes[t.id] = { land: el };
   }
+  svg.append(land);
+  // evidenziazioni (sopra le terre, sotto le pedine)
+  const hl = sv('g', { 'pointer-events': 'none' });
+  for (const t of MAP.territories) { const e = sv('path', { class: 'hl', d: pts(t) }); hl.append(e); nodes[t.id].hl = e; }
+  svg.append(hl);
+  // bussola
+  svg.append(sv('g', { transform: 'translate(95,520)', opacity: '.8', 'pointer-events': 'none' },
+    sv('circle', { r: 46, fill: 'none', stroke: '#e8d9a8', 'stroke-width': 1.5 }), sv('circle', { r: 38, fill: 'none', stroke: '#e8d9a8', 'stroke-width': .8 }),
+    sv('path', { d: 'M0 -44 L7 -7 L44 0 L7 7 L0 44 L-7 7 L-44 0 L-7 -7Z', fill: '#e8d9a8', 'fill-opacity': .85, stroke: '#3b2a14' }),
+    sv('path', { d: 'M0 -44 L7 -7 L0 0 L-7 -7Z', fill: '#c0392b' }),
+    sv('text', { y: -52, 'text-anchor': 'middle', fill: '#e8d9a8', 'font-size': 13, 'font-family': 'Georgia,serif', 'font-weight': 700 }, 'N')));
+  // nomi e pedine
+  const names = sv('g', { 'pointer-events': 'none' }), toks = sv('g');
+  for (const t of MAP.territories) {
+    const w = t.name.toUpperCase().split(' ');
+    let lines = [w.join(' ')];
+    if (w.length > 1 && lines[0].length > 10) { // due righe bilanciate
+      let best = 1e9;
+      for (let k = 1; k < w.length; k++) { const a = w.slice(0, k).join(' '), b = w.slice(k).join(' '), m = Math.max(a.length, b.length); if (m < best) { best = m; lines = [a, b]; } }
+    }
+    const tx = sv('text', { class: 'tname', x: t.x, y: t.y + 27 });
+    lines.forEach((ln, k) => tx.append(sv('tspan', { x: t.x, dy: k ? 9.5 : 0 }, ln)));
+    names.append(tx);
+    const c = sv('circle', { r: 15, cx: 0, cy: 0 }), sh = sv('circle', { r: 15, fill: 'url(#tokshine)' }), ring = sv('circle', { r: 12, class: 'ring' });
+    const n = sv('text', { class: 'tn' });
+    const g = sv('g', { class: 'tok', transform: `translate(${t.x},${t.y})`, filter: 'url(#tokshadow)' }, c, ring, sh, n);
+    g.onclick = () => onTerr(t.id);
+    toks.append(g); Object.assign(nodes[t.id], { g, c, n, x: t.x, y: t.y });
+  }
+  svg.append(names, toks);
+  // titolo
+  svg.append(sv('rect', { x: 16, y: 584, width: 130, height: 26, rx: 4, fill: '#b3261e', stroke: '#e8d9a8', 'stroke-width': 1.5, 'pointer-events': 'none' }),
+    sv('text', { x: 81, y: 603, 'text-anchor': 'middle', fill: '#fff', 'font-size': 18, 'font-weight': 900, 'font-style': 'italic', 'font-family': 'Georgia,serif', 'letter-spacing': 2, 'pointer-events': 'none' }, 'RISIKO!'));
   mapBuilt = true;
 }
 
@@ -133,13 +178,15 @@ function targets(g) {
 function renderMap(g) {
   const tg = targets(g), mine = myTurn(g);
   const col = Object.fromEntries(g.players.map((p) => [p.id, p.color]));
+  const attacking = mine && g.phase === 'attack' && sel.from;
   for (const id in nodes) {
     const t = g.terr[id], nd = nodes[id];
-    nd.c.setAttribute('fill', t.owner ? col[t.owner] : '#667');
+    nd.c.setAttribute('fill', t.owner ? col[t.owner] : '#8a8f98');
     nd.n.textContent = t.armies;
-    nd.g.classList.toggle('sel', sel.from === id);
-    nd.g.classList.toggle('tgt', sel.to === id || tg.has(id));
-    nd.g.classList.toggle('dim', mine && g.phase === 'attack' && sel.from && sel.from !== id && !tg.has(id) && t.owner !== S.me.id);
+    const isSel = sel.from === id, isTgt = sel.to === id || tg.has(id);
+    nd.hl.setAttribute('class', 'hl' + (isSel ? ' sel' : isTgt ? (sel.to === id ? ' tgt pick' : ' tgt') : ''));
+    nd.land.setAttribute('class', 'land' + (attacking && !isSel && !isTgt ? ' dim' : ''));
+    nd.g.setAttribute('transform', `translate(${nd.x},${nd.y})${isSel ? ' scale(1.2)' : ''}`);
   }
 }
 
@@ -215,7 +262,7 @@ function renderGame(g) {
     const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
     side.append(h('div', { class: 'box' }, h('h3', {}, 'Ultimo scontro'),
       h('div', {}, `${b.by}: ${T[b.from]} → ${T[b.to]}${b.rounds > 1 ? ` (${b.rounds} round)` : ''}`),
-      h('div', { class: 'dice' }, b.att.map((d) => h('span', { class: 'a' }, d)), ' vs ', b.def.map((d) => h('span', { class: 'd' }, d))),
+      h('div', { class: 'dice' }, b.att.map((d) => h('span', { class: 'a' }, FACES[d - 1])), h('i', {}, 'vs'), b.def.map((d) => h('span', { class: 'd' }, FACES[d - 1]))),
       h('div', { class: 'mut' }, `Perdite: attaccante ${b.al}, difensore ${b.dl}`)));
   }
 
