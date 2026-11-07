@@ -53,3 +53,5 @@ dialog{background:var(--card);color:var(--fg);border:1px solid var(--line);borde
 dialog::backdrop{background:#000a}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-top:1px solid var(--line);text-align:left}
 @media(max-width:820px){#game{grid-template-columns:1fr;height:auto}#mapwrap{height:60vh}}
+
+.obj{border-color:#c9a227;background:#241f10}.obj .banner{font-size:15px;color:#ffe08a}

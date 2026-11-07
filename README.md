@@ -27,8 +27,16 @@ Variabili: `PORT`, `HOST`, `RISK_DATA_DIR`, `RISK_ADMIN_USER`, `RISK_ADMIN_PASSW
 
 ## Regole implementate
 
-Mappa classica (42 territori, 6 continenti, bonus 5/2/5/3/7/2). Armate iniziali 40/35/30 per 2/3/4 giocatori, piazzamento a turni di 3.
-Turno: rinforzi (territori/3, min 3, + continenti, + tris) → attacco (1–3 dadi o blitz, difensore 1–2 dadi, spostamento dopo la conquista) → spostamento (una mossa, tra territori collegati) → carta se si è conquistato. Tris: 3 artiglieria 4, 3 cavalleria 6, 3 fanteria 8, 3 diverse 10, jolly jolly; obbligatorio con 5+ carte. Eliminando un avversario si prendono le sue carte. Vince l'ultimo giocatore rimasto (conquista del mondo): **non** sono implementate le carte obiettivo del Risiko italiano.
+Mappa classica (42 territori, 6 continenti, bonus 5/2/5/3/7/2). Armate iniziali 35/30 per 3/4 giocatori (40 per 2), piazzamento a turni di 3. Eserciti di 6 colori (blu, rosso, nero, giallo, verde, viola), 4 assegnati a caso.
+Turno: rinforzi (territori/3, min 3, + continenti, + tris) → attacco (attaccante 1–3 dadi, **difensore 1–3 dadi**, pareggio al difensore, blitz, spostamento dopo la conquista) → spostamento (una mossa, tra territori collegati) → carta se si è conquistato.
+Tris: 3 cannoni 4, 3 fanti 6, 3 cavalli 8, uno per tipo 10, jolly + 2 uguali 12 (il jolly non sostituisce altre carte); obbligatorio con 5+ carte. Eliminando un avversario si prendono le sue carte.
+
+### Carte obiettivo (segrete)
+Ogni giocatore riceve a caso una delle 14 carte, vince chi per primo la realizza (controllo immediato dopo ogni sua azione):
+conquistare 24 territori · 18 territori con almeno 2 armate ciascuno · Asia + Sud America · Asia + Africa · Nord America + Africa · Nord America + Oceania · Europa + Sud America + un terzo continente · Europa + Oceania + un terzo continente · distruggere l'armata di uno dei 6 colori.
+Se l'armata da distruggere non è in gioco, è la propria, o viene eliminata da un altro giocatore, l'obiettivo diventa **24 territori**. A fine partita tutti gli obiettivi vengono rivelati. Vince comunque chi resta l'ultimo giocatore.
+
+> **Da verificare:** non ho potuto consultare il regolamento ufficiale. I tipi di obiettivo, i valori dei tris, il jolly, i 3 dadi di difesa e la regola del colore non in gioco sono confermati da fonti consultate; l'elenco esatto dei continenti nelle carte e il minimo di 3 rinforzi per turno sono da memoria. L'edizione "Torneo" ha 16 obiettivi diversi, non implementata. Gli obiettivi sono tutti in `server/objectives.js` (`DEFS`), modificabili in un punto solo.
 
 ## Test
 

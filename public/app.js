@@ -175,7 +175,7 @@ function renderGame(g) {
   const ban = h('div', { class: 'box' });
   if (g.status === 'finished') {
     const w = g.players.find((p) => p.id === g.winner);
-    ban.append(h('div', { class: 'banner' }, `🏆 Vince ${w ? w.name : '—'}!`));
+    ban.append(h('div', { class: 'banner' }, `🏆 Vince ${w ? w.name : '—'}!`), h('div', { class: 'mut' }, `${w ? w.name : ''} ${g.winReason || ''}.`));
   } else {
     ban.append(h('div', { class: 'banner' }, mine ? `Tocca a te — ${PHASES[g.phase]}` : `Turno di ${cp.name} — ${PHASES[g.phase]}`));
     ban.append(h('div', { class: 'mut' }, hint(g, mine, cp)));
@@ -187,10 +187,20 @@ function renderGame(g) {
   g.players.forEach((p, i) => {
     const s = stats(p);
     pb.append(h('div', { class: 'pl' + (g.status === 'playing' && i === g.turn ? ' turn' : '') + (p.alive ? '' : ' dead') },
-      h('span', { class: 'chip', style: `background:${p.color}` }), h('span', { class: 'n' }, p.name + (p.id === S.me.id ? ' (tu)' : '')),
+      h('span', { class: 'chip', style: `background:${p.color}` }), h('span', { class: 'n', title: p.colorName }, p.name + (p.id === S.me.id ? ' (tu)' : ''), p.colorName ? h('span', { class: 'mut' }, ` · ${p.colorName}`) : ''),
       h('span', { class: 'mut', title: 'territori / armate / carte' }, `🗺${s.t} ⚔${s.a} 🂠${p.cardCount}` + (g.phase === 'setup' || (g.phase === 'reinforce' && i === g.turn) ? ` +${p.pool}` : ''))));
   });
   side.append(pb);
+
+  // obiettivo segreto (a fine partita sono rivelati tutti)
+  const meP = g.players.find((p) => p.id === S.me.id);
+  if (g.status === 'finished') {
+    side.append(h('div', { class: 'box' }, h('h3', {}, 'Obiettivi rivelati'),
+      ...g.players.map((p) => h('div', { class: 'pl' }, h('span', { class: 'chip', style: `background:${p.color}` }), h('span', {}, `${p.name}: ${p.objective || '—'}`)))));
+  } else if (meP && meP.objective) {
+    const ob = h('div', { class: 'box obj' }, h('h3', {}, '🎯 Il tuo obiettivo (segreto)'), h('div', { class: 'banner', id: 'objtxt' }, meP.objective));
+    side.append(ob);
+  }
 
   // azioni
   if (mine) side.append(actionsBox(g, cp));
@@ -273,7 +283,7 @@ function cardsBox(g, me, mine) {
   me.cards.forEach((c, i) => bx.append(h('label', { class: 'card-it' },
     h('input', { type: 'checkbox', disabled: !(mine && g.phase === 'reinforce'), onchange: (e) => { e.target.checked ? chosen.add(i) : chosen.delete(i); btn.disabled = chosen.size !== 3; } }),
     `${KIND_ICON[c.k]} ${KIND[c.k]}${c.t ? ' · ' + T[c.t] : ''}`)));
-  bx.append(h('div', { class: 'mut' }, 'Tris: 3 uguali (artiglieria 4, cavalleria 6, fanteria 8), 3 diverse 10. Il jolly vale come qualsiasi carta. Con 5+ carte il tris è obbligatorio.'));
+  bx.append(h('div', { class: 'mut' }, 'Tris: 3 cannoni 4, 3 fanti 6, 3 cavalli 8, uno per tipo 10, jolly + 2 uguali 12. Il jolly vale solo in quest\'ultima combinazione. Con 5+ carte il tris è obbligatorio.'));
   if (mine && g.phase === 'reinforce') bx.append(h('div', { class: 'btns' }, btn));
   return bx;
 }

@@ -2,11 +2,12 @@
 // Logica di gioco pura (nessun I/O). Il server è l'unica autorità.
 const { CONTINENTS, IDS, ADJ } = require('./map');
 
-const COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f'];
+const OBJ = require('./objectives');
 const START = { 2: 40, 3: 35, 4: 30 };
 const MAX_PLAYERS = 4;
-const SAME_BONUS = { 0: 8, 1: 6, 2: 4 }; // fanteria, cavalleria, artiglieria
-const DIFF_BONUS = 10;
+// Tris originali: cannoni (2) 4, fanti (0) 6, cavalli (1) 8, uno per tipo 10, jolly + 2 uguali 12.
+const SAME_BONUS = { 0: 6, 1: 8, 2: 4 };
+const DIFF_BONUS = 10, JOKER_BONUS = 12;
 
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const roll = (n) => Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 6)).sort((a, b) => b - a);
@@ -30,14 +31,16 @@ function start(g) {
   if (g.status !== 'lobby') return 'Partita già avviata';
   if (g.players.length < 2) return 'Servono almeno 2 giocatori';
   shuffle(g.players);
-  g.players.forEach((p, i) => { p.color = COLORS[i]; p.alive = true; p.cards = []; p.pool = 0; });
+  const cols = OBJ.shuffle(OBJ.COLOR_DEFS.slice());
+  g.players.forEach((p, i) => { p.colorKey = cols[i].key; p.colorName = cols[i].name; p.color = cols[i].hex; p.alive = true; p.cards = []; p.pool = 0; });
   g.terr = {};
   IDS.forEach((t) => (g.terr[t] = { owner: null, armies: 1 }));
   shuffle(IDS.slice()).forEach((t, i) => (g.terr[t].owner = g.players[i % g.players.length].id));
   g.players.forEach((p) => (p.pool = START[g.players.length] - owned(g, p.id).length));
+  OBJ.deal(g);
   g.deck = shuffle([...IDS.map((t, i) => ({ t, k: i % 3 })), { t: null, k: 3 }, { t: null, k: 3 }]);
   g.discard = [];
-  Object.assign(g, { status: 'playing', phase: 'setup', turn: 0, setupPlaced: 0, conquered: false, pending: null, lastBattle: null, winner: null, log: [] });
+  Object.assign(g, { winReason: null, status: 'playing', phase: 'setup', turn: 0, setupPlaced: 0, conquered: false, pending: null, lastBattle: null, winner: null, log: [] });
   log(g, 'La partita inizia! Ordine di gioco: ' + g.players.map((p) => p.name).join(', '));
   log(g, `Fase di piazzamento: ${cur(g).name} piazza fino a 3 armate per turno.`);
   return null;
@@ -50,17 +53,10 @@ function tradeValue(cs) {
   if (cs.length !== 3) return 0;
   const jokers = cs.filter((c) => c.k === 3).length;
   const ks = cs.filter((c) => c.k !== 3).map((c) => c.k);
-  const val = (kinds) => {
-    if (kinds.every((k) => k === kinds[0])) return SAME_BONUS[kinds[0]];
-    return new Set(kinds).size === 3 ? DIFF_BONUS : 0;
-  };
-  if (!jokers) return val(ks);
-  let best = 0;
-  for (let a = 0; a < 3; a++) {
-    if (jokers === 1) best = Math.max(best, val([...ks, a]));
-    else for (let b = 0; b < 3; b++) best = Math.max(best, val([ks[0] ?? a, a, b]));
-  }
-  return best;
+  if (jokers > 1) return 0;
+  if (jokers === 1) return ks[0] === ks[1] ? JOKER_BONUS : 0; // il jolly vale solo con due carte uguali
+  if (ks.every((k) => k === ks[0])) return SAME_BONUS[ks[0]];
+  return new Set(ks).size === 3 ? DIFF_BONUS : 0;
 }
 
 function connected(g, from, to, pid) {
@@ -73,13 +69,13 @@ function connected(g, from, to, pid) {
   return false;
 }
 
+function win(g, p, reason) {
+  g.status = 'finished'; g.phase = 'finished'; g.winner = p.id; g.pending = null; g.winReason = reason;
+  log(g, `🏆 ${p.name} ${reason} e vince la partita!`);
+}
 function checkWin(g) {
   const alive = g.players.filter((p) => p.alive);
-  if (alive.length === 1 && g.status === 'playing') {
-    g.status = 'finished'; g.phase = 'finished'; g.winner = alive[0].id; g.pending = null;
-    log(g, `🏆 ${alive[0].name} conquista il mondo e vince la partita!`);
-    return true;
-  }
+  if (alive.length === 1 && g.status === 'playing') { win(g, alive[0], 'è l\'ultimo giocatore rimasto'); return true; }
   return false;
 }
 
@@ -115,7 +111,7 @@ function advanceSetup(g) {
 
 function attackOnce(g, from, to, dice) {
   const F = g.terr[from], T = g.terr[to], me = cur(g);
-  const defDice = Math.min(2, T.armies);
+  const defDice = Math.min(3, T.armies);
   const a = roll(dice), d = roll(defDice);
   let al = 0, dl = 0;
   for (let i = 0; i < Math.min(a.length, d.length); i++) (a[i] > d[i] ? dl++ : al++);
@@ -133,8 +129,10 @@ function conquer(g, from, to, dice) {
     me.cards.push(...prev.cards);
     log(g, `💀 ${prev.name} è eliminato! ${me.name} prende le sue ${prev.cards.length} carte.`);
     prev.cards = []; prev.pool = 0;
+    if (me.obj.type === 'destroy' && me.obj.target === prev.id) win(g, me, `ha distrutto l'armata ${prev.colorName.toLowerCase()}, il suo obiettivo`);
+    else OBJ.retarget(g, prev.id);
   }
-  if (checkWin(g)) { const mv = F.armies - 1; F.armies -= mv; T.armies += mv; return; }
+  if (g.status === 'finished' || checkWin(g)) { const mv = F.armies - 1; F.armies -= mv; T.armies += mv; return; }
   const min = Math.min(dice, F.armies - 1), max = F.armies - 1;
   F.armies -= min; T.armies += min; // spostamento obbligatorio immediato
   if (min >= max) { g.pending = null; g.phase = 'attack'; }
@@ -186,6 +184,7 @@ function eliminate(g, pid, why) {
   g.discard.push(...p.cards); p.cards = [];
   IDS.forEach((t) => { if (g.terr[t].owner === pid) g.terr[t].owner = null; });
   log(g, `${p.name} ${why || 'ha lasciato la partita'}; i suoi territori diventano neutrali.`);
+  OBJ.retarget(g, pid);
   if (checkWin(g)) return;
   if (wasTurn) {
     g.pending = null; g.conquered = false;
@@ -196,6 +195,15 @@ function eliminate(g, pid, why) {
 const int = (v) => (Number.isInteger(v) ? v : NaN);
 
 function act(g, pid, m) {
+  const e = actInner(g, pid, m);
+  if (!e && g.status === 'playing') {
+    const p = pl(g, pid);
+    if (p && p.alive && p.obj && OBJ.check(g, pid, p.obj)) win(g, p, 'ha raggiunto il proprio obiettivo');
+  }
+  return e;
+}
+
+function actInner(g, pid, m) {
   if (g.status !== 'playing') return 'La partita non è in corso';
   const me = cur(g);
   if (me.id !== pid) return 'Non è il tuo turno';
@@ -265,9 +273,9 @@ function act(g, pid, m) {
 function view(g, pid) {
   const v = {
     id: g.id, name: g.name, hostId: g.hostId, status: g.status, phase: g.phase, turn: g.turn, setupPlaced: g.setupPlaced,
-    conquered: g.conquered, pending: g.pending, lastBattle: g.lastBattle, winner: g.winner, terr: g.terr, log: g.log.slice(-60),
+    conquered: g.conquered, pending: g.pending, lastBattle: g.lastBattle, winner: g.winner, winReason: g.winReason, terr: g.terr, log: g.log.slice(-60),
     players: g.players.map((p, i) => ({
-      id: p.id, name: p.name, color: p.color || COLORS[i], alive: p.alive !== false, pool: p.pool || 0,
+      id: p.id, name: p.name, color: p.color || OBJ.COLOR_DEFS[i].hex, colorName: p.colorName, objective: (p.id === pid || g.status === 'finished') && p.obj ? p.obj.text : undefined, alive: p.alive !== false, pool: p.pool || 0,
       cardCount: p.cards ? p.cards.length : 0, cards: p.id === pid && p.cards ? p.cards : undefined,
     })),
   };
