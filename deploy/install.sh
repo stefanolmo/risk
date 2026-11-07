@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Installazione su Ubuntu (testata sul modello Ubuntu LTS): eseguire come root dalla radice del progetto.
 set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."   # funziona da qualsiasi cartella
+[ -f package.json ] && [ -d server ] && [ -d public ] || { echo "Radice del progetto non trovata"; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "Eseguire con sudo"; exit 1; }
 apt-get update
 apt-get install -y nodejs npm
