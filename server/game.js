@@ -7,6 +7,12 @@ const MIN_PLAYERS = 3, MAX_PLAYERS = 6;
 const START = { 3: 35, 4: 30, 5: 25, 6: 20 }; // armate della dotazione iniziale
 // Tris: 3 cannoni 4, 3 fanti 6, 3 cavalieri 8, uno per tipo 10, jolly + 2 uguali 12 (tipi: 0 fante, 1 cavaliere, 2 cannone, 3 jolly)
 const SAME_BONUS = { 0: 6, 1: 8, 2: 4 }, DIFF_BONUS = 10, JOKER_BONUS = 12, OWNED_CARD_BONUS = 2;
+// Simbolo di ogni carta territorio, come sulle carte originali (0 fante, 1 cavaliere, 2 cannone); 16 fanti, 16 cavalieri, 10 cannoni.
+const CARD_KIND = {};
+'afg ukr gbr ala ido bra eaf sib ura sca seu weu alb nwt arg naf'.split(' ').forEach((t) => (CARD_KIND[t] = 0));
+'mon sia isl neu eus wus per ven egy jap ind cam ont ngu eau mad'.split(' ').forEach((t) => (CARD_KIND[t] = 1));
+'yak chi irk wau saf con mea kam gro que'.split(' ').forEach((t) => (CARD_KIND[t] = 2));
+IDS.forEach((t) => { if (CARD_KIND[t] === undefined) throw new Error('simbolo mancante per ' + t); });
 const NAMES = Object.fromEntries(TERRITORIES.map((t) => [t.id, t.name]));
 const nm = (id) => NAMES[id];
 
@@ -62,7 +68,7 @@ function finishColors(g) {
   shuffle(IDS.slice()).forEach((t, i) => { g.terr[t] = { owner: g.players[(1 + i) % n].id, armies: 1 }; }); // si parte dal giocatore a sinistra del mazziere
   g.players.forEach((p) => (p.pool = START[n] - owned(g, p.id).length));
   OBJ.deal(g);
-  g.deck = shuffle([...IDS.map((t, i) => ({ t, k: i % 3 })), { t: null, k: 3 }, { t: null, k: 3 }]);
+  g.deck = shuffle([...IDS.map((t) => ({ t, k: CARD_KIND[t] })), { t: null, k: 3 }, { t: null, k: 3 }]);
   g.phase = 'setup'; g.setupPlaced = 0;
   log(g, `${g.players[0].name} (mazziere) distribuisce gli obiettivi segreti e i territori; ogni territorio riceve un'armata.`);
   log(g, `Piazzamento: ${cur(g).name} posiziona 3 armate alla volta, poi a turno gli altri.`);
@@ -314,9 +320,9 @@ function view(g, pid) {
     players: g.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, colorName: p.colorName, alive: p.alive !== false, pool: p.pool || 0,
       cardCount: p.cards ? p.cards.length : 0, cards: p.id === pid && p.cards ? p.cards : undefined,
-      objective: (p.id === pid || g.status === 'finished') && p.obj ? p.obj.text : undefined,
+      objective: (p.id === pid || g.status === 'finished') && p.obj ? { card: p.card, text: p.obj.text, changed: p.obj.id !== p.card } : undefined,
     })),
   };
 }
 
-module.exports = { createGame, addPlayer, start, act, eliminate, view, tradeValue, calcReinforce, maxDefDice, MIN_PLAYERS, MAX_PLAYERS, START, pl, cur };
+module.exports = { CARD_KIND, createGame, addPlayer, start, act, eliminate, view, tradeValue, calcReinforce, maxDefDice, MIN_PLAYERS, MAX_PLAYERS, START, pl, cur };

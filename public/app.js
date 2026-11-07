@@ -288,18 +288,12 @@ function renderGame(g) {
   const meP = g.players.find((p) => p.id === S.me.id);
   if (g.status === 'finished') {
     side.append(h('div', { class: 'box' }, h('h3', {}, 'Obiettivi rivelati'),
-      ...g.players.map((p) => h('div', { class: 'pl' }, h('span', { class: 'chip', style: `background:${p.color}` }), h('span', {}, `${p.name}: ${p.objective || '—'}`)))));
-  } else if (meP && meP.objective) {
-    const ob = h('div', { class: 'box obj' }, h('h3', {}, '🎯 Il tuo obiettivo (segreto)'), h('div', { class: 'banner', id: 'objtxt' }, meP.objective));
-    side.append(ob);
+      ...g.players.map((p) => h('div', { class: 'pl' }, h('span', { class: 'chip', style: `background:${p.color}` }), h('span', {}, `${p.name}: ${p.objective ? p.objective.text : '—'}`)))));
   }
 
   // azioni
   if (mine || amDefender(g)) side.append(actionsBox(g, cp));
 
-  // carte
-  const me = g.players.find((p) => p.id === S.me.id);
-  if (me && me.cards && me.cards.length) side.append(cardsBox(g, me, mine));
 
   // ultimo scontro
   const b = g.lastBattle;
@@ -321,6 +315,7 @@ function renderGame(g) {
       ? h('button', { class: 'primary', onclick: () => send({ type: 'leaveGame' }) }, 'Torna alla lobby')
       : h('button', { onclick: () => confirm('Abbandonare la partita? I tuoi territori diventeranno neutrali.') && send({ type: 'leaveGame' }) }, 'Abbandona'),
     g.hostId === S.me.id && g.status !== 'finished' && h('button', { class: 'danger', onclick: () => confirm('Annullare la partita per tutti?') && send({ type: 'cancelGame' }) }, 'Annulla partita')));
+  renderHand(g);
 }
 
 function hint(g, mine, cp) {
@@ -380,16 +375,69 @@ function actionsBox(g, cp) {
   bx.append(bt); return bx;
 }
 
-function cardsBox(g, me, mine) {
-  const chosen = new Set(), bx = h('div', { class: 'box' }, h('h3', {}, 'Le tue carte'));
-  const btn = h('button', { class: 'primary', disabled: true, onclick: () => act({ a: 'trade', idx: [...chosen] }) }, g.traded ? 'Tris già giocato' : 'Gioca tris');
-  const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
-  me.cards.forEach((c, i) => bx.append(h('label', { class: 'card-it' },
-    h('input', { type: 'checkbox', disabled: !(mine && g.phase === 'reinforce' && !g.traded), onchange: (e) => { e.target.checked ? chosen.add(i) : chosen.delete(i); btn.disabled = chosen.size !== 3; } }),
-    `${KIND_ICON[c.k]} ${KIND[c.k]}${c.t ? ' · ' + T[c.t] : ''}`)));
-  bx.append(h('div', { class: 'mut' }, 'Un tris per turno: 3 cannoni 4, 3 fanti 6, 3 cavalieri 8, uno per tipo 10, jolly + 2 uguali 12 (il jolly vale solo così). +2 armate per ogni carta del tris che raffigura un territorio che possiedi.'));
-  if (mine && g.phase === 'reinforce' && !g.traded) bx.append(h('div', { class: 'btns' }, btn));
-  return bx;
+// ---------- fascia in basso: la tua missione e le tue carte, come carte vere ----------
+let missionHidden = false, handSel = new Set(), handSig = '';
+try { missionHidden = localStorage.getItem('risiko_mission_hidden') === '1'; } catch {}
+document.addEventListener('cards-ready', () => S && S.game && S.game.status !== 'lobby' && renderHand(S.game));
+
+// stessa regola del server (solo anteprima: decide sempre il server)
+function tradeValue(cs) {
+  if (cs.length !== 3) return 0;
+  const jokers = cs.filter((c) => c.k === 3).length, ks = cs.filter((c) => c.k !== 3).map((c) => c.k);
+  if (jokers > 1) return 0;
+  if (jokers === 1) return ks[0] === ks[1] ? 12 : 0;
+  if (ks.every((k) => k === ks[0])) return { 0: 6, 1: 8, 2: 4 }[ks[0]];
+  return new Set(ks).size === 3 ? 10 : 0;
+}
+function highlight(id, on) { const nd = nodes[id]; if (nd) nd.hl.classList.toggle('sel', on); }
+
+function renderHand(g) {
+  const box = clear($('#hand')), me = g.players.find((p) => p.id === S.me.id);
+  if (!me || !Cards.ready() || !MAP || (!me.objective && !(me.cards && me.cards.length))) { box.hidden = true; return; }
+  box.hidden = false;
+  const cards = me.cards || [], canTrade = myTurn(g) && g.phase === 'reinforce' && !g.traded;
+  const sig = cards.map((c) => c.t || 'J').join(',');
+  if (sig !== handSig) { handSig = sig; handSel = new Set(); }
+  if (!canTrade) handSel = new Set();
+
+  // missione (segreta): si può girare a faccia in giù cliccandola
+  if (me.objective) {
+    const card = h('div', { class: 'hcard mission' + (missionHidden ? ' down' : ''), title: missionHidden ? 'Tocca per mostrare la missione' : 'Tocca per nasconderla agli sguardi altrui', onclick: () => {
+      missionHidden = !missionHidden; try { localStorage.setItem('risiko_mission_hidden', missionHidden ? '1' : '0'); } catch {} renderHand(S.game); } });
+    card.innerHTML = missionHidden ? '<div class="back"><b>MISSIONE</b><span>segreta</span></div>' : Cards.mission(me.objective.card);
+    box.append(h('div', { class: 'hgroup' }, h('div', { class: 'hlabel' }, '🎯 La tua missione'), card,
+      me.objective.changed ? h('div', { class: 'hnote' }, me.objective.text) : null));
+  }
+  box.append(h('div', { class: 'hsep' }));
+
+  // carte territorio
+  const fan = h('div', { class: 'fan' });
+  if (!cards.length) fan.append(h('div', { class: 'hempty' }, 'Nessuna carta territorio. Se conquisti almeno un territorio, a fine turno ne peschi una.'));
+  cards.forEach((c, i) => {
+    const owned = c.t && g.terr[c.t] && g.terr[c.t].owner === S.me.id;
+    const el = h('div', { class: 'hcard terr' + (handSel.has(i) ? ' picked' : '') + (canTrade ? ' pick' : ''),
+      title: c.k === 3 ? 'Jolly' : `${(MAP.territories.find((t) => t.id === c.t) || {}).full} (${Cards.SYM_NAME[c.k]})${owned ? ' — territorio tuo: +2 armate se giochi il tris' : ''}`,
+      onmouseenter: () => c.t && highlight(c.t, true), onmouseleave: () => c.t && highlight(c.t, false),
+      onclick: () => {
+        if (!canTrade) return;
+        if (handSel.has(i)) handSel.delete(i); else if (handSel.size < 3) handSel.add(i);
+        renderHand(S.game);
+      } });
+    el.innerHTML = Cards.territory(c, MAP) + (owned ? '<span class="own">+2</span>' : '');
+    fan.append(el);
+  });
+  const chosen = [...handSel].map((i) => cards[i]), val = tradeValue(chosen);
+  const extra = chosen.filter((c) => c.t && g.terr[c.t].owner === S.me.id).length * 2;
+  const ctl = h('div', { class: 'hgroup tris' });
+  if (cards.length) {
+    ctl.append(h('div', { class: 'hlabel' }, `🂠 Le tue carte (${cards.length})`));
+    if (canTrade) {
+      ctl.append(h('button', { class: 'primary', disabled: !val, onclick: () => act({ a: 'trade', idx: [...handSel] }) }, val ? `Gioca il tris (+${val + extra})` : 'Gioca il tris'),
+        h('div', { class: 'hnote' }, handSel.size < 3 ? `Scegli 3 carte (${handSel.size}/3)` : val ? `${val} armate${extra ? ` + ${extra} per i territori tuoi` : ''}` : 'Combinazione non valida'));
+    } else ctl.append(h('div', { class: 'hnote' }, g.traded && myTurn(g) ? 'Hai già giocato il tris in questo turno.' : 'Il tris si gioca a inizio turno, nella fase di rinforzo.'));
+    ctl.append(h('div', { class: 'hnote rules' }, '3 cannoni 4 · 3 fanti 6 · 3 cavalieri 8 · uno per tipo 10 · jolly + 2 uguali 12. +2 armate per ogni carta di un territorio tuo.'));
+  }
+  box.append(h('div', { class: 'hgroup grow' }, fan), cards.length ? ctl : '');
 }
 
 // ---------- admin ----------

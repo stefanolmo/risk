@@ -202,7 +202,10 @@ assert.strictEqual(G.tradeValue([{ k: 3 }, { k: 0 }, { k: 1 }]), 0); assert.stri
 }
 
 // ---------------- obiettivi ----------------
-assert.strictEqual(OBJ.DEFS.length, 14);
+assert.strictEqual(OBJ.DEFS.length, 12, 'le 12 carte missione del gioco originale');
+assert.deepStrictEqual(OBJ.DEFS.filter((d) => d.type === 'destroy').map((d) => d.color).sort(), ['arancione', 'blu', 'giallo', 'indaco', 'verde']);
+assert.deepStrictEqual(OBJ.DEFS.filter((d) => d.type === 'cont').map((d) => d.id).sort(), ['as-af', 'as-sa', 'eu-oc', 'na-af', 'na-oc']);
+{ const k = Object.values(G.CARD_KIND).reduce((a, v) => (a[v] = (a[v] || 0) + 1, a), {}); assert.deepStrictEqual(k, { 0: 16, 1: 16, 2: 10 }, 'simboli delle carte territorio come nel PDF'); assert.strictEqual(Object.keys(G.CARD_KIND).length, 42); }
 const mk = (n = 3) => begin(n);
 for (let i = 0; i < 200; i++) { const g = mk(6); g.players.forEach((p) => { assert(p.obj); if (p.obj.type === 'destroy') assert(p.obj.target && p.obj.target !== p.id); }); }
 for (let i = 0; i < 100; i++) { const g = mk(3); g.players.forEach((p) => p.obj.type === 'destroy' && assert(g.players.some((x) => x.id === p.obj.target), 'colore assente -> 24 territori')); }
@@ -211,8 +214,8 @@ for (let i = 0; i < 100; i++) { const g = mk(3); g.players.forEach((p) => p.obj.
   const own = (ids, pid) => ids.forEach((t) => (g.terr[t].owner = pid));
   const C = (id) => CONTINENTS.find((c) => c.id === id).terrs;
   IDS.forEach((t) => (g.terr[t].owner = b.id));
-  a.obj = OBJ.DEFS.find((d) => d.id === 'eu-sa+1'); assert(!OBJ.check(g, a.id, a.obj));
-  own([...C('eu'), ...C('sa')], a.id); assert(!OBJ.check(g, a.id, a.obj), 'serve un terzo continente');
+  a.obj = OBJ.DEFS.find((d) => d.id === 'eu-oc'); assert(!OBJ.check(g, a.id, a.obj));
+  own(C('eu'), a.id); assert(!OBJ.check(g, a.id, a.obj), 'servono entrambi i continenti');
   own(C('oc'), a.id); assert(OBJ.check(g, a.id, a.obj));
   a.obj = OBJ.DEFS.find((d) => d.id === 'as-af'); own([...C('as'), ...C('af')], a.id); assert(OBJ.check(g, a.id, a.obj));
   IDS.forEach((t) => { g.terr[t].owner = b.id; g.terr[t].armies = 1; });
@@ -229,8 +232,8 @@ for (let i = 0; i < 100; i++) { const g = mk(3); g.players.forEach((p) => p.obj.
 }
 { // distruggere: vince solo chi elimina; se elimina un altro, si ripiega sui 24
   const g = mk(4), [a, b, c] = g.players, R = Math.random;
-  a.obj = { ...OBJ.DEFS.find((d) => d.id === 'd-' + b.colorKey), target: b.id };
-  c.obj = { ...OBJ.DEFS.find((d) => d.id === 'd-' + a.colorKey), target: a.id };
+  a.obj = { id: 'd-test', type: 'destroy', color: b.colorKey, target: b.id, text: '' };
+  c.obj = { id: 'd-test', type: 'destroy', color: a.colorKey, target: a.id, text: '' };
   IDS.forEach((t) => { g.terr[t].owner = c.id; g.terr[t].armies = 5; });
   g.terr.ala.owner = b.id; g.terr.ala.armies = 1; g.terr.nwt.owner = a.id; g.terr.nwt.armies = 1;
   g.turn = g.players.indexOf(c); g.phase = 'attack';

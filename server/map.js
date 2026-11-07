@@ -68,6 +68,11 @@ let SHAPES = null;
 try { SHAPES = require('./shapes.json'); } catch { /* assente solo durante la prima generazione */ }
 if (SHAPES) TERRITORIES.forEach((t) => Object.assign(t, SHAPES.terr[t.id]));
 
+// Nomi estesi (le etichette della mappa sono abbreviate), usati sulle carte.
+const FULL = { nwt: 'Territori del Nord Ovest', neu: 'Europa Settentrionale', weu: 'Europa Occidentale', seu: 'Europa Meridionale',
+  wus: 'Stati Uniti Occidentali', eus: 'Stati Uniti Orientali', wau: 'Australia Occidentale', eau: 'Australia Orientale' };
+TERRITORIES.forEach((t) => { t.full = FULL[t.id] || t.name; });
+
 const IDS = TERRITORIES.map((t) => t.id);
 const ADJ = {};
 IDS.forEach((i) => (ADJ[i] = []));

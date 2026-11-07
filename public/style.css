@@ -33,7 +33,7 @@ h2{margin:0 0 10px;color:var(--gold)}
 .chip{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:middle;border:2px solid #fff;box-shadow:0 1px 2px #000}
 #toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#5b1d1d;border:2px solid var(--bad);padding:8px 16px;border-radius:8px;z-index:20;max-width:90vw;box-shadow:0 4px 14px #000a}
 #toast.ok{background:#1f4a2c;border-color:#7ed08f}
-#game{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:12px;padding:12px;height:calc(100vh - 52px)}
+#game{display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:minmax(0,1fr) auto;gap:12px;padding:12px;height:calc(100vh - 52px)}
 #mapwrap{background:#0b2233;border:6px solid var(--wood2);outline:2px solid var(--gold);border-radius:8px;min-height:0;box-shadow:0 8px 24px #000b}
 #map{width:100%;height:100%;display:block}
 #side{overflow:auto;display:flex;flex-direction:column;gap:10px;min-height:0;padding-right:2px}
@@ -84,7 +84,7 @@ h2{margin:0 0 10px;color:var(--gold)}
 .chip{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:middle;border:2px solid #fff;box-shadow:0 1px 2px #000}
 #toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#5b1d1d;border:2px solid var(--bad);padding:8px 16px;border-radius:8px;z-index:20;max-width:90vw;box-shadow:0 4px 14px #000a}
 #toast.ok{background:#1f4a2c;border-color:#7ed08f}
-#game{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:12px;padding:12px;height:calc(100vh - 52px)}
+#game{display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:minmax(0,1fr) auto;gap:12px;padding:12px;height:calc(100vh - 52px)}
 #mapwrap{background:#0b2233;border:6px solid var(--wood2);outline:2px solid var(--gold);border-radius:8px;min-height:0;box-shadow:0 8px 24px #000b}
 #map{width:100%;height:100%;display:block}
 #side{overflow:auto;display:flex;flex-direction:column;gap:10px;min-height:0;padding-right:2px}
@@ -119,6 +119,30 @@ h2{margin:0 0 10px;color:var(--gold)}
 dialog{color:var(--cream);width:min(640px,94vw)}
 dialog::backdrop{background:#000b}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-top:1px solid #6b4d2b;text-align:left}
-@media(max-width:820px){#game{grid-template-columns:1fr;height:auto}#mapwrap{height:62vh}}
+@media(max-width:820px){#game{grid-template-columns:1fr;grid-template-rows:auto;height:auto}#mapwrap{height:62vh}}
 
 .swatches{display:grid;grid-template-columns:1fr 1fr;gap:8px}.swatch{color:#fff;text-shadow:0 1px 2px #000;font-weight:700;padding:12px 8px;border:2px solid #fff}
+
+/* fascia carte in basso */
+#hand{grid-column:1/-1;position:relative;z-index:6;display:flex;gap:14px;align-items:flex-end;padding:8px 14px 10px;background:linear-gradient(var(--wood2),var(--wood));border:2px solid var(--gold);border-radius:10px;box-shadow:0 -4px 16px #000a}
+.hgroup{display:flex;flex-direction:column;gap:5px;min-width:0}.hgroup.grow{flex:1}
+.hlabel{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--gold)}
+.hnote{font-size:12px;color:var(--mut);max-width:210px}.hnote.rules{font-size:11px;opacity:.8}
+.hsep{align-self:stretch;width:1px;background:#6b4d2b}
+.hcard{position:relative;width:88px;flex:none;border-radius:5px;box-shadow:0 3px 8px #000c;transform-origin:50% 100%;transition:transform .15s,box-shadow .15s;background:#d9c58f}
+.hcard .cardart{display:block;width:100%;height:auto;border-radius:5px}
+.hcard:hover{transform:translateY(-8px) scale(1.9);z-index:30;box-shadow:0 8px 22px #000d}
+.hcard.mission{transform-origin:0 100%}
+.hcard.terr.pick{cursor:pointer}
+.hcard.picked{transform:translateY(-18px);box-shadow:0 0 0 3px var(--gold),0 8px 18px #000c}
+.hcard.picked:hover{transform:translateY(-26px) scale(1.9)}
+.hcard .own{position:absolute;top:3px;right:3px;background:var(--gold);color:#2a1a0e;font:700 10px var(--font);padding:1px 4px;border-radius:8px;pointer-events:none}
+.hcard .back{aspect-ratio:670/1046;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#f4d9d9;background:repeating-linear-gradient(45deg,#a3172a 0 7px,#8e1424 7px 14px);border:3px solid #e8d9a8;box-sizing:border-box;font-size:11px}
+.hcard .back b{letter-spacing:.08em}
+.fan{display:flex;align-items:flex-end;min-height:140px;padding-top:30px}
+.fan .hcard{flex:0 1 88px;min-width:24px}
+.fan .hcard .cardart{width:88px}
+.fan .hcard:last-child{flex:0 0 88px}
+.hempty{color:var(--mut);font-size:13px;max-width:360px;align-self:center}
+.hgroup.tris{align-items:flex-start;justify-content:flex-end}
+@media(max-width:820px){.hcard,.fan .hcard .cardart{width:70px}.fan .hcard{flex-basis:70px}.fan .hcard:last-child{flex-basis:70px}.hcard:hover{transform:translateY(-8px) scale(1.6)}#hand{flex-wrap:wrap}}
