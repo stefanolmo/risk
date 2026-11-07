@@ -38,6 +38,18 @@ Se l'armata da distruggere non è in gioco, è la propria, o viene eliminata da 
 
 > **Da verificare:** non ho potuto consultare il regolamento ufficiale. I tipi di obiettivo, i valori dei tris, il jolly, i 3 dadi di difesa e la regola del colore non in gioco sono confermati da fonti consultate; l'elenco esatto dei continenti nelle carte e il minimo di 3 rinforzi per turno sono da memoria. L'edizione "Torneo" ha 16 obiettivi diversi, non implementata. Gli obiettivi sono tutti in `server/objectives.js` (`DEFS`), modificabili in un punto solo.
 
+## Mappa
+
+Le sagome dei 42 territori vengono da un file SVG del tabellone fornito dall'utente (`Risk_board.svg`, layer "countries"); sono salvate già elaborate in `server/shapes.json`, quindi per far girare il gioco non serve altro. Per rigenerarle (serve Playwright e il file SVG originale, non incluso nel repository):
+
+```bash
+node tools/build-map.js percorso/Risk_board.svg
+```
+
+Lo script verifica anche che i territori che si toccano sulla mappa coincidano esattamente con le adiacenze delle regole, e deduce i collegamenti via mare. Nel gioco: rotella o pulsanti +/− per lo zoom, trascinamento per spostare la mappa, i nomi compaiono da ingrandito e al passaggio del mouse.
+
+> **Licenza:** il file SVG non riporta la licenza. Prima di distribuire il progetto fuori dalla rete locale verificare le condizioni d'uso della fonte originale.
+
 ## Test
 
 ```bash

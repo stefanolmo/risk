@@ -102,67 +102,105 @@ const NS = 'http://www.w3.org/2000/svg';
 const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); e.append(...kids); return e; };
 const nodes = {};
 const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const view = { x: 0, y: 0, w: 750, h: 520, k: 1 };
+let moved = false;
+
+function setView() {
+  const svg = $('#map');
+  view.w = MAP.view.w / view.k; view.h = MAP.view.h / view.k;
+  const mx = MAP.view.w * 0.08, my = MAP.view.h * 0.08;
+  view.x = Math.max(-mx, Math.min(view.x, MAP.view.w - view.w + mx));
+  view.y = Math.max(-my, Math.min(view.y, MAP.view.h - view.h + my));
+  svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  svg.classList.toggle('zoomed', view.k >= 1.9);
+}
+function zoomAt(f, cx, cy) { // cx,cy in coordinate mappa
+  const k = Math.max(1, Math.min(7, view.k * f)), r = view.k / k;
+  view.x = cx - (cx - view.x) * r; view.y = cy - (cy - view.y) * r; view.k = k; setView();
+}
+function toMap(ev) { const svg = $('#map'), pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+function initZoom() {
+  const svg = $('#map');
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = toMap(e); zoomAt(e.deltaY < 0 ? 1.25 : 0.8, p.x, p.y); }, { passive: false });
+  let drag = null;
+  svg.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, s: svg.getScreenCTM().a }; moved = false; });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) > 5) moved = true;
+    if (moved) { view.x = drag.vx - dx / drag.s; view.y = drag.vy - dy / drag.s; setView(); }
+  });
+  window.addEventListener('pointerup', () => { drag = null; setTimeout(() => (moved = false), 0); });
+  $('#zin').onclick = () => zoomAt(1.4, view.x + view.w / 2, view.y + view.h / 2);
+  $('#zout').onclick = () => zoomAt(1 / 1.4, view.x + view.w / 2, view.y + view.h / 2);
+  $('#zreset').onclick = () => { view.k = 1; view.x = view.y = 0; setView(); };
+}
+
+function showHover(id) {
+  const g = S && S.game, box = $('#hoverinfo');
+  if (!g || !g.terr || !id) { box.hidden = true; return; }
+  const t = g.terr[id], o = g.players.find((p) => p.id === t.owner), T = MAP.territories.find((x) => x.id === id);
+  clear(box).append(h('b', {}, T.name), ` — ${o ? o.name : 'neutrale'} · ${t.armies} ${t.armies === 1 ? 'armata' : 'armate'}`);
+  box.hidden = false;
+}
+
 function buildMap() {
   const svg = clear($('#map')), T = Object.fromEntries(MAP.territories.map((t) => [t.id, t]));
   const col = Object.fromEntries(MAP.continents.map((c) => [c.id, c.color]));
-  const pts = (t) => 'M' + t.poly.split(' ').join('L') + 'Z';
+  const W = MAP.view.w, H = MAP.view.h;
   svg.append(sv('defs', {},
     sv('radialGradient', { id: 'sea', cx: '50%', cy: '45%', r: '75%' }, sv('stop', { offset: '0', 'stop-color': '#2c6f93' }), sv('stop', { offset: '1', 'stop-color': '#173f5c' })),
-    sv('pattern', { id: 'waves', width: 40, height: 20, patternUnits: 'userSpaceOnUse' }, sv('path', { d: 'M0 10 q10 -8 20 0 t20 0', fill: 'none', stroke: '#ffffff', 'stroke-opacity': '.07', 'stroke-width': 1.2 })),
+    sv('pattern', { id: 'waves', width: 30, height: 15, patternUnits: 'userSpaceOnUse' }, sv('path', { d: 'M0 7 q7.5 -6 15 0 t15 0', fill: 'none', stroke: '#ffffff', 'stroke-opacity': '.07', 'stroke-width': .8 })),
     sv('radialGradient', { id: 'tokshine', cx: '35%', cy: '30%', r: '70%' }, sv('stop', { offset: '0', 'stop-color': '#fff', 'stop-opacity': '.55' }), sv('stop', { offset: '.5', 'stop-color': '#fff', 'stop-opacity': '0' })),
-    sv('filter', { id: 'shadow', x: '-10%', y: '-10%', width: '120%', height: '125%' }, sv('feDropShadow', { dx: 0, dy: 3, stdDeviation: 3, 'flood-color': '#000', 'flood-opacity': '.5' })),
-    sv('filter', { id: 'tokshadow', x: '-40%', y: '-40%', width: '180%', height: '180%' }, sv('feDropShadow', { dx: 0, dy: 2, stdDeviation: 1.6, 'flood-color': '#000', 'flood-opacity': '.7' }))));
-  // oceano + cornice
+    sv('filter', { id: 'shadow', x: '-5%', y: '-5%', width: '110%', height: '115%' }, sv('feDropShadow', { dx: 0, dy: 1.6, stdDeviation: 1.6, 'flood-color': '#000', 'flood-opacity': '.55' })),
+    sv('filter', { id: 'tokshadow', x: '-40%', y: '-40%', width: '180%', height: '180%' }, sv('feDropShadow', { dx: 0, dy: 1.2, stdDeviation: 1, 'flood-color': '#000', 'flood-opacity': '.7' }))));
   svg.append(sv('rect', { x: -1500, y: -900, width: 4000, height: 2400, fill: 'url(#sea)' }), sv('rect', { x: -1500, y: -900, width: 4000, height: 2400, fill: 'url(#waves)' }));
-  // collegamenti via mare
-  const sea = sv('g', { class: 'sea' });
-  for (const [a, b] of MAP.seaLinks) {
-    const A = T[a], B = T[b];
-    if (a === 'ala' && b === 'kam') { sea.append(sv('line', { x1: 18, y1: 88, x2: -60, y2: 88 }), sv('line', { x1: 950, y1: 110, x2: 1060, y2: 110 })); continue; }
-    sea.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y }));
-  }
-  svg.append(sea);
-  // terre
+  // terre: sagome originali del tabellone
   const land = sv('g', { filter: 'url(#shadow)' });
   for (const t of MAP.territories) {
-    const el = sv('path', { class: 'land', d: pts(t), fill: col[t.continent] }, sv('title', {}, t.name));
-    el.onclick = () => onTerr(t.id);
+    const el = sv('path', { class: 'land', d: t.d, fill: col[t.continent] }, sv('title', {}, t.name));
+    el.onclick = () => !moved && onTerr(t.id);
+    el.onmouseenter = () => showHover(t.id); el.onmouseleave = () => showHover(null);
     land.append(el); nodes[t.id] = { land: el };
   }
-  svg.append(land);
-  // evidenziazioni (sopra le terre, sotto le pedine)
-  const hl = sv('g', { 'pointer-events': 'none' });
-  for (const t of MAP.territories) { const e = sv('path', { class: 'hl', d: pts(t) }); hl.append(e); nodes[t.id].hl = e; }
+  svg.append(sv('g', { transform: `translate(${MAP.shapesTx},${MAP.shapesTy})` }, land));
+  // collegamenti via mare (tratteggiati)
+  const sea = sv('g', { class: 'sea' });
+  for (const l of [...MAP.sea, ...MAP.wrap]) sea.append(sv('line', { x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2 }));
+  svg.append(sea);
+  // evidenziazioni
+  const hl = sv('g', { 'pointer-events': 'none', transform: `translate(${MAP.shapesTx},${MAP.shapesTy})` });
+  for (const t of MAP.territories) { const e = sv('path', { class: 'hl', d: t.d }); hl.append(e); nodes[t.id].hl = e; }
   svg.append(hl);
-  // bussola
-  svg.append(sv('g', { transform: 'translate(95,520)', opacity: '.8', 'pointer-events': 'none' },
+  // bussola + titolo
+  svg.append(sv('g', { transform: 'translate(40,440) scale(.62)', opacity: '.85', 'pointer-events': 'none' },
     sv('circle', { r: 46, fill: 'none', stroke: '#e8d9a8', 'stroke-width': 1.5 }), sv('circle', { r: 38, fill: 'none', stroke: '#e8d9a8', 'stroke-width': .8 }),
     sv('path', { d: 'M0 -44 L7 -7 L44 0 L7 7 L0 44 L-7 7 L-44 0 L-7 -7Z', fill: '#e8d9a8', 'fill-opacity': .85, stroke: '#3b2a14' }),
     sv('path', { d: 'M0 -44 L7 -7 L0 0 L-7 -7Z', fill: '#c0392b' }),
     sv('text', { y: -52, 'text-anchor': 'middle', fill: '#e8d9a8', 'font-size': 13, 'font-family': 'Georgia,serif', 'font-weight': 700 }, 'N')));
-  // nomi e pedine
-  const names = sv('g', { 'pointer-events': 'none' }), toks = sv('g');
+  svg.append(sv('rect', { x: 8, y: 486, width: 92, height: 21, rx: 3, fill: '#b3261e', stroke: '#e8d9a8', 'stroke-width': 1, 'pointer-events': 'none' }),
+    sv('text', { x: 54, y: 501, 'text-anchor': 'middle', fill: '#fff', 'font-size': 14, 'font-weight': 900, 'font-style': 'italic', 'font-family': 'Georgia,serif', 'letter-spacing': 1.5, 'pointer-events': 'none' }, 'RISIKO!'));
+  // nomi (visibili da ingrandito) e pedine
+  const names = sv('g', { class: 'names', 'pointer-events': 'none' }), toks = sv('g');
   for (const t of MAP.territories) {
     const w = t.name.toUpperCase().split(' ');
     let lines = [w.join(' ')];
-    if (w.length > 1 && lines[0].length > 10) { // due righe bilanciate
+    if (w.length > 1 && lines[0].length > 10) {
       let best = 1e9;
       for (let k = 1; k < w.length; k++) { const a = w.slice(0, k).join(' '), b = w.slice(k).join(' '), m = Math.max(a.length, b.length); if (m < best) { best = m; lines = [a, b]; } }
     }
-    const tx = sv('text', { class: 'tname', x: t.x, y: t.y + 27 });
-    lines.forEach((ln, k) => tx.append(sv('tspan', { x: t.x, dy: k ? 9.5 : 0 }, ln)));
+    const tx = sv('text', { class: 'tname', x: t.x, y: t.y + 19 });
+    lines.forEach((ln, k) => tx.append(sv('tspan', { x: t.x, dy: k ? 5 : 0 }, ln)));
     names.append(tx);
-    const c = sv('circle', { r: 15, cx: 0, cy: 0 }), sh = sv('circle', { r: 15, fill: 'url(#tokshine)' }), ring = sv('circle', { r: 12, class: 'ring' });
+    const c = sv('circle', { r: 10, cx: 0, cy: 0 }), sh = sv('circle', { r: 10, fill: 'url(#tokshine)' }), ring = sv('circle', { r: 8, class: 'ring' });
     const n = sv('text', { class: 'tn' });
     const g = sv('g', { class: 'tok', transform: `translate(${t.x},${t.y})`, filter: 'url(#tokshadow)' }, c, ring, sh, n);
-    g.onclick = () => onTerr(t.id);
+    g.onclick = () => !moved && onTerr(t.id);
+    g.onmouseenter = () => showHover(t.id); g.onmouseleave = () => showHover(null);
     toks.append(g); Object.assign(nodes[t.id], { g, c, n, x: t.x, y: t.y });
   }
   svg.append(names, toks);
-  // titolo
-  svg.append(sv('rect', { x: 16, y: 584, width: 130, height: 26, rx: 4, fill: '#b3261e', stroke: '#e8d9a8', 'stroke-width': 1.5, 'pointer-events': 'none' }),
-    sv('text', { x: 81, y: 603, 'text-anchor': 'middle', fill: '#fff', 'font-size': 18, 'font-weight': 900, 'font-style': 'italic', 'font-family': 'Georgia,serif', 'letter-spacing': 2, 'pointer-events': 'none' }, 'RISIKO!'));
-  mapBuilt = true;
+  setView(); mapBuilt = true;
 }
 
 function myTurn(g) { const p = g.players[g.turn]; return g.status === 'playing' && p && p.id === S.me.id; }
@@ -182,7 +220,7 @@ function renderMap(g) {
   for (const id in nodes) {
     const t = g.terr[id], nd = nodes[id];
     nd.c.setAttribute('fill', t.owner ? col[t.owner] : '#8a8f98');
-    nd.n.textContent = t.armies;
+    nd.n.textContent = t.armies; nd.n.setAttribute('class', 'tn' + (t.armies > 99 ? ' s3' : t.armies > 9 ? ' s2' : ''));
     const isSel = sel.from === id, isTgt = sel.to === id || tg.has(id);
     nd.hl.setAttribute('class', 'hl' + (isSel ? ' sel' : isTgt ? (sel.to === id ? ' tgt pick' : ' tgt') : ''));
     nd.land.setAttribute('class', 'land' + (attacking && !isSel && !isTgt ? ' dim' : ''));
@@ -359,7 +397,7 @@ function renderAdmin() {
 
 // ---------- avvio ----------
 fetch('/map.json').then((r) => r.json()).then((m) => {
-  MAP = m; m.edges.forEach(([a, b]) => { (adj[a] ||= []).push(b); (adj[b] ||= []).push(a); });
-  buildMap(); if (S && S.game && S.game.status !== 'lobby') renderGame(S.game);
+  MAP = m; MAP.shapesTx = m.tx; MAP.shapesTy = m.ty; m.edges.forEach(([a, b]) => { (adj[a] ||= []).push(b); (adj[b] ||= []).push(a); });
+  initZoom(); buildMap(); if (S && S.game && S.game.status !== 'lobby') renderGame(S.game);
 });
 connect();

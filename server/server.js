@@ -229,7 +229,7 @@ const server = http.createServer((req, res) => {
   const url = decodeURIComponent((req.url || '/').split('?')[0]);
   if (url === '/map.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ continents: MAP.CONTINENTS, territories: MAP.TERRITORIES, edges: MAP.EDGES, seaLinks: MAP.SEA_LINKS }));
+    return res.end(JSON.stringify({ continents: MAP.CONTINENTS, territories: MAP.TERRITORIES, edges: MAP.EDGES, view: { w: MAP.SHAPES.w, h: MAP.SHAPES.h }, tx: MAP.SHAPES.tx, ty: MAP.SHAPES.ty, sea: MAP.SHAPES.sea, wrap: MAP.SHAPES.wrap }));
   }
   const rel = url === '/' ? 'index.html' : url.replace(/^\/+/, '');
   const file = path.join(PUBLIC, rel);

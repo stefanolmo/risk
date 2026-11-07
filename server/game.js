@@ -129,7 +129,7 @@ function conquer(g, from, to, dice) {
     me.cards.push(...prev.cards);
     log(g, `💀 ${prev.name} è eliminato! ${me.name} prende le sue ${prev.cards.length} carte.`);
     prev.cards = []; prev.pool = 0;
-    if (me.obj.type === 'destroy' && me.obj.target === prev.id) win(g, me, `ha distrutto l'armata ${prev.colorName.toLowerCase()}, il suo obiettivo`);
+    if (me.obj.type === 'destroy' && me.obj.target === prev.id) win(g, me, `ha distrutto l'armata ${OBJ.adjOf(prev.colorKey)}, il suo obiettivo`);
     else OBJ.retarget(g, prev.id);
   }
   if (g.status === 'finished' || checkWin(g)) { const mv = F.armies - 1; F.armies -= mv; T.armies += mv; return; }
