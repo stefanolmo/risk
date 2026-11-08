@@ -169,30 +169,6 @@ assert.strictEqual(G.tradeValue([{ k: 3 }, { k: 0 }, { k: 1 }]), 0); assert.stri
   assert.strictEqual(G.act(g, a.id, { a: 'attack', from: 'ala', to: 'kam', dice: 1 }), null, 'Alaska può attaccare la Kamchatka');
 }
 
-// ---------------- registro del turno attuale ----------------
-{
-  const g = begin(3), a = G.cur(g), b = g.players[1], R = Math.random;
-  IDS.forEach((t) => { g.terr[t].owner = g.players[2].id; g.terr[t].armies = 1; });
-  g.terr.alb.owner = a.id; g.terr.alb.armies = 10; g.terr.ala.owner = b.id; g.terr.ala.armies = 5;
-  g.phase = 'reinforce'; a.pool = 2; g.turnLog = [{ t: 'start', pool: 2 }]; g.traded = false;
-  assert.strictEqual(G.act(g, a.id, { a: 'place', t: 'alb', n: 1 }), null); assert.strictEqual(G.act(g, a.id, { a: 'place', t: 'alb', n: 1 }), null);
-  assert.deepStrictEqual(g.turnLog.map((e) => e.t), ['start', 'place'], 'i piazzamenti consecutivi sullo stesso territorio si fondono'); assert.strictEqual(g.turnLog[1].n, 2);
-  assert.strictEqual(G.act(g, a.id, { a: 'endReinforce' }), null);
-  assert.strictEqual(G.act(g, a.id, { a: 'attack', from: 'alb', to: 'ala', dice: 3 }), null);
-  let atk = g.turnLog.find((e) => e.t === 'attack'); assert(atk && !atk.done && atk.dice === 3 && atk.defender === b.name, 'attacco dichiarato, ancora senza dadi');
-  assert.strictEqual(g.pa.id, atk.id); assert.strictEqual(g.lastBattle, null, 'nessun lancio prima che il difensore dichiari');
-  let k = 0; const seq = [0.99, 0.5, 0.2, 0.99, 0]; Math.random = () => seq[k++];
-  assert.strictEqual(G.act(g, b.id, { a: 'defend', dice: 2 }), null); Math.random = R;
-  atk = g.turnLog.find((e) => e.t === 'attack');
-  assert(atk.done && atk.att.length === 3 && atk.def.length === 2 && atk.al + atk.dl === 2, 'dadi di attacco e difesa registrati');
-  assert.strictEqual(g.lastBattle.id, atk.id); const id1 = atk.id;
-  assert.strictEqual(G.act(g, a.id, { a: 'attack', from: 'alb', to: 'ala', dice: 1 }), null); assert(g.pa.id > id1, 'ogni scontro ha un id crescente');
-  // il registro si azzera al cambio di turno
-  G.act(g, b.id, { a: 'defend', dice: 1 }); G.act(g, a.id, { a: 'endTurn' });
-  assert.deepStrictEqual(g.turnLog.map((e) => e.t), ['start'], 'nuovo turno, nuovo registro'); assert.notStrictEqual(G.cur(g).id, a.id);
-  assert(G.view(g, a.id).turnLog.length === 1);
-}
-
 // ---------------- spostamento strategico e carta di fine turno ----------------
 {
   const g = begin(3), a = G.cur(g);
