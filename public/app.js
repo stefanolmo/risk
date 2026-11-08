@@ -101,7 +101,6 @@ function renderRoom(g) {
 const NS = 'http://www.w3.org/2000/svg';
 const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); e.append(...kids); return e; };
 const nodes = {};
-const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const view = { x: 0, y: 0, w: 750, h: 520, k: 1 };
 let moved = false;
 
@@ -298,7 +297,10 @@ function renderGame(g) {
   // ultimo scontro
   function diceRows(b) { // attaccante sopra, difensore sotto; si confrontano i dadi in coppia (a parità vince il difensore)
     const n = Math.min(b.att.length, b.def.length);
-    const die = (d, cls, win) => h('span', { class: `die ${cls}${win === undefined ? '' : win ? ' win' : ' lose'}` }, FACES[d - 1]);
+    // dado disegnato: griglia 3x3 con i puntini accesi secondo il valore (nessuna animazione)
+    const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+    const die = (d, cls, win) => h('span', { class: `die ${cls}${win === undefined ? '' : win ? ' win' : ' lose'}`, role: 'img', 'aria-label': `dado ${d}` },
+      Array.from({ length: 9 }, (_, i) => h('i', { class: PIPS[d].includes(i) ? 'pip' : '' })));
     return h('div', { class: 'dicerows' },
       h('div', { class: 'dicerow' }, h('span', { class: 'who a' }, 'Attacco'), b.att.map((d, i) => die(d, 'a', i < n ? d > b.def[i] : undefined))),
       h('div', { class: 'dicerow' }, h('span', { class: 'who d' }, 'Difesa'), b.def.map((d, i) => die(d, 'd', i < n ? b.att[i] <= d : undefined))));
