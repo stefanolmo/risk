@@ -23,6 +23,8 @@ const log = (g, t) => { g.log.push(t); if (g.log.length > 250) g.log.splice(0, g
 const pl = (g, id) => g.players.find((p) => p.id === id);
 const cur = (g) => g.players[g.turn];
 const owned = (g, id) => IDS.filter((t) => g.terr[t].owner === id);
+// Cronaca strutturata del turno in corso (mostrata dal client "Turno attuale"); si azzera a ogni cambio di turno.
+const ev = (g, e) => { (g.turnLog = g.turnLog || []).push(e); if (g.turnLog.length > 80) g.turnLog.splice(0, g.turnLog.length - 80); return e; };
 const int = (v) => (Number.isInteger(v) ? v : NaN);
 
 function createGame(id, name, host) {
@@ -54,7 +56,7 @@ function start(g) {
   g.terr = {}; IDS.forEach((t) => (g.terr[t] = { owner: null, armies: 0 }));
   Object.assign(g, {
     status: 'playing', phase: 'colors', turn: 0, setupPlaced: 0, conquered: false, traded: false, pa: null, pending: null,
-    lastBattle: null, winner: null, winReason: null, deck: [], discard: [], freeColors: OBJ.COLOR_DEFS.map((c) => c.key),
+    lastBattle: null, battleId: 0, turnLog: [], winner: null, winReason: null, deck: [], discard: [], freeColors: OBJ.COLOR_DEFS.map((c) => c.key),
   });
   log(g, `${cur(g).name} ha il punteggio più alto: gioca per primo ed è il mazziere.`);
   log(g, `${cur(g).name} sceglie il colore dell'esercito.`);
@@ -102,6 +104,7 @@ function beginReinforce(g) {
   const p = cur(g);
   p.pool = calcReinforce(g, p.id);
   g.phase = 'reinforce'; g.conquered = false; g.traded = false; g.pending = null; g.pa = null;
+  g.turnLog = []; ev(g, { t: 'start', pool: p.pool });
   log(g, `Turno di ${p.name}: ${p.pool} armate di rinforzo.`);
 }
 
@@ -120,7 +123,7 @@ function advanceTurn(g, giveCard) {
 }
 
 function advanceSetup(g) {
-  g.setupPlaced = 0;
+  g.setupPlaced = 0; g.turnLog = [];
   const n = g.players.length;
   for (let i = 1; i <= n; i++) {
     const idx = (g.turn + i) % n;
@@ -144,7 +147,8 @@ function declareAttack(g, m) {
   if (F.armies < 2) return 'Non puoi attaccare da un territorio presidiato da una sola armata';
   const dice = int(m.dice);
   if (!(dice >= 1 && dice <= 3 && dice <= F.armies - 1)) return 'Numero di dadi non valido (almeno un\'armata deve restare a presidio)';
-  g.pa = { from, to, dice, defender: T.owner };
+  g.pa = { id: ++g.battleId, from, to, dice, defender: T.owner };
+  ev(g, { t: 'attack', id: g.pa.id, from, to, dice, defender: T.owner ? pl(g, T.owner).name : null, done: false });
   log(g, `${me.name} attacca ${nm(to)} da ${nm(from)} con ${dice} ${dice === 1 ? 'dado' : 'dadi'}.`);
   if (!T.owner) return resolveAttack(g, Math.min(3, T.armies)); // territorio neutrale: nessuno decide
   g.phase = 'defend';
@@ -166,7 +170,8 @@ function resolveAttack(g, ddice) {
   for (let i = 0; i < Math.min(a.length, d.length); i++) (a[i] > d[i] ? dl++ : al++); // a parità vince sempre il difensore
   F.armies -= al; T.armies -= dl;
   const vs = T.owner ? pl(g, T.owner).name : 'neutrale';
-  g.lastBattle = { from, to, att: a, def: d, al, dl, by: me.name, vs };
+  g.lastBattle = { id: g.pa.id, from, to, att: a, def: d, al, dl, by: me.name, vs };
+  Object.assign((g.turnLog || []).find((e) => e.t === 'attack' && e.id === g.pa.id) || {}, { done: true, att: a, def: d, al, dl });
   log(g, `${nm(from)} → ${nm(to)}: attaccante [${a}] contro difensore [${d}]. Perde ${al} l'attaccante, ${dl} ${vs}.`);
   g.pa = null; g.phase = 'attack';
   if (T.armies <= 0) conquer(g, from, to, dice);
@@ -177,6 +182,7 @@ function conquer(g, from, to, dice) {
   const F = g.terr[from], T = g.terr[to], me = cur(g);
   const prev = T.owner ? pl(g, T.owner) : null;
   T.owner = me.id; g.conquered = true;
+  const atkEv = (g.turnLog || []).find((e) => e.t === 'attack' && e.id === (g.lastBattle && g.lastBattle.id)); if (atkEv) atkEv.conquered = true;
   log(g, `${me.name} conquista ${nm(to)}${prev ? ' a ' + prev.name : ''}.`);
   if (prev && !owned(g, prev.id).length) { // eliminazione: si prendono anche le carte
     prev.alive = false;
@@ -249,6 +255,8 @@ function actInner(g, pid, m) {
       if (n > me.pool) return 'Non hai abbastanza armate';
       if (g.phase === 'setup' && n > 3 - g.setupPlaced) return 'In questa fase si piazzano 3 armate alla volta';
       t.armies += n; me.pool -= n;
+      const lastEv = (g.turnLog || [])[(g.turnLog || []).length - 1];
+      if (lastEv && lastEv.t === 'place' && lastEv.terr === m.t) lastEv.n += n; else ev(g, { t: 'place', terr: m.t, n });
       if (g.phase === 'setup') { g.setupPlaced += n; if (g.setupPlaced >= 3 || me.pool === 0) advanceSetup(g); }
       return null;
     }
@@ -262,6 +270,7 @@ function actInner(g, pid, m) {
       const extra = cs.filter((c) => c.t && g.terr[c.t].owner === pid).length * OWNED_CARD_BONUS; // +2 per carta di un tuo territorio
       me.cards = me.cards.filter((_, i) => !idx.includes(i));
       g.discard.push(...cs); me.pool += v + extra; g.traded = true;
+      ev(g, { t: 'trade', n: v + extra });
       log(g, `${me.name} gioca un tris: +${v} armate${extra ? `, più ${extra} per i territori posseduti` : ''}.`);
       return null;
     }
@@ -277,6 +286,7 @@ function actInner(g, pid, m) {
       const n = int(m.n), { from, to, min, max } = g.pending;
       if (!(n >= min && n <= max)) return `Sposta tra ${min} e ${max} armate`;
       g.terr[from].armies -= n - min; g.terr[to].armies += n - min;
+      if (n > min) ev(g, { t: 'move', from, to, n });
       g.pending = null; g.phase = 'attack'; return null;
     }
     case 'endAttack':
@@ -289,6 +299,7 @@ function actInner(g, pid, m) {
       if (!ADJ[m.from].includes(m.to)) return 'I territori devono essere contigui';
       if (!(n >= 1 && n <= F.armies - 1)) return 'Quantità non valida (deve restare almeno 1 armata)';
       F.armies -= n; T.armies += n;
+      ev(g, { t: 'fortify', from: m.from, to: m.to, n });
       log(g, `${me.name} sposta ${n} armate da ${nm(m.from)} a ${nm(m.to)}.`);
       advanceTurn(g, true); return null;
     }
@@ -315,7 +326,7 @@ function view(g, pid) {
   return {
     id: g.id, name: g.name, hostId: g.hostId, status: g.status, phase: g.phase, turn: g.turn, setupPlaced: g.setupPlaced,
     conquered: g.conquered, traded: g.traded, pending: g.pending, pa: g.pa, lastBattle: g.lastBattle, winner: g.winner, winReason: g.winReason,
-    freeColors: g.freeColors, min: MIN_PLAYERS, max: MAX_PLAYERS, terr: g.terr, log: (g.log || []).slice(-60),
+    turnLog: g.turnLog || [], freeColors: g.freeColors, min: MIN_PLAYERS, max: MAX_PLAYERS, terr: g.terr, log: (g.log || []).slice(-60),
     colors: OBJ.COLOR_DEFS.map((c) => ({ key: c.key, name: c.name, hex: c.hex })),
     players: g.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, colorName: p.colorName, alive: p.alive !== false, pool: p.pool || 0,

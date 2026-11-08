@@ -29,7 +29,7 @@ function connect() {
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.type === 'auth') { token = m.token; try { localStorage.setItem('risiko_token', token); } catch {} }
-    else if (m.type === 'state') { S = m; render(); }
+    else if (m.type === 'state') { S = m; if (S.game && S.game.terr) trackBattle(S.game); render(); }
     else if (m.type === 'error') {
       if (m.code === 'auth') { token = null; try { localStorage.removeItem('risiko_token'); } catch {} S = null; show(); }
       $('#login-err').textContent = m.message; toast(m.message);
@@ -215,12 +215,32 @@ function targets(g) {
   return out;
 }
 
+// ---------- evoluzione dello scontro: prima i dadi dell'attaccante, poi quelli del difensore ----------
+// Il server risolve lo scontro quando il difensore ha dichiarato i dadi; qui si mostra a tempo, e la mappa
+// resta ai valori di prima finché i dadi non sono comparsi.
+let preBattle = null, battleSeen = -1, stage = null, stageTimers = [], trackedGame = null;
+function trackBattle(g) {
+  if (g.id !== trackedGame) { trackedGame = g.id; battleSeen = -1; preBattle = null; stage = null; stageTimers.forEach(clearTimeout); }
+  if (g.phase === 'defend' && g.pa) preBattle = { id: g.pa.id, terr: { [g.pa.from]: { ...g.terr[g.pa.from] }, [g.pa.to]: { ...g.terr[g.pa.to] } } };
+  const b = g.lastBattle;
+  if (!b) { if (battleSeen < 0) battleSeen = 0; return; }
+  if (battleSeen < 0) { battleSeen = b.id; return; } // appena entrato: nessuna animazione sugli scontri vecchi
+  if (b.id <= battleSeen) return;
+  battleSeen = b.id;
+  if (!preBattle || preBattle.id !== b.id) return;
+  stageTimers.forEach(clearTimeout);
+  const me = { id: b.id, step: 1, pre: preBattle }; stage = me;
+  const again = () => { if (stage === me && S && S.game) renderGame(S.game); };
+  stageTimers = [setTimeout(() => { me.step = 2; again(); }, 1100), setTimeout(() => { if (stage === me) stage = null; again(); }, 2300)];
+}
+const terrNow = (g, id) => (stage && stage.pre.terr[id]) || g.terr[id];
+
 function renderMap(g) {
   const tg = targets(g), mine = myTurn(g);
   const col = Object.fromEntries(g.players.map((p) => [p.id, p.color]));
   const attacking = mine && (g.phase === 'attack' || g.phase === 'fortify') && sel.from;
   for (const id in nodes) {
-    const t = g.terr[id], nd = nodes[id];
+    const t = terrNow(g, id), nd = nodes[id];
     nd.c.setAttribute('fill', t.owner ? col[t.owner] : '#8a8f98');
     nd.g.style.display = t.armies ? '' : 'none'; // prima della distribuzione non ci sono pedine
     nd.n.textContent = t.armies; nd.n.setAttribute('class', 'tn' + (t.armies > 99 ? ' s3' : t.armies > 9 ? ' s2' : ''));
@@ -260,7 +280,7 @@ function renderGame(g) {
   if (sel.to && g.terr[sel.to].owner === S.me.id && g.phase !== 'fortify') sel.to = null; // territorio appena conquistato
   renderMap(g);
   const side = clear($('#side')), cp = g.players[g.turn], mine = myTurn(g);
-  const stats = (p) => { let t = 0, a = 0; for (const k in g.terr) if (g.terr[k].owner === p.id) { t++; a += g.terr[k].armies; } return { t, a }; };
+  const stats = (p) => { let t = 0, a = 0; for (const k in g.terr) { const x = terrNow(g, k); if (x.owner === p.id) { t++; a += x.armies; } } return { t, a }; };
 
   // stato turno
   const ban = h('div', { class: 'box' });
@@ -273,6 +293,7 @@ function renderGame(g) {
     ban.append(h('div', { class: 'mut' }, hint(g, mine, cp)));
   }
   side.append(ban);
+  if (g.status === 'playing' && g.phase !== 'colors') side.append(turnBox(g));
 
   // giocatori
   const pb = h('div', { class: 'box' }, h('h3', {}, 'Giocatori'));
@@ -292,22 +313,20 @@ function renderGame(g) {
   }
 
   // azioni
-  if (mine || amDefender(g)) side.append(actionsBox(g, cp));
+  if (stage) side.append(h('div', { class: 'box' }, h('h3', {}, 'Azioni'), h('div', { class: 'mut' }, 'Tiro dei dadi…')));
+  else if (mine || amDefender(g)) side.append(actionsBox(g, cp));
 
-
-  // ultimo scontro
-  const b = g.lastBattle;
-  if (b) {
-    const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
-    side.append(h('div', { class: 'box' }, h('h3', {}, 'Ultimo scontro'),
-      h('div', {}, `${b.by}: ${T[b.from]} → ${T[b.to]}${b.rounds > 1 ? ` (${b.rounds} round)` : ''}`),
-      h('div', { class: 'dice' }, b.att.map((d) => h('span', { class: 'a' }, FACES[d - 1])), h('i', {}, 'vs'), b.def.map((d) => h('span', { class: 'd' }, FACES[d - 1]))),
-      h('div', { class: 'mut' }, `Perdite: attaccante ${b.al}, difensore ${b.dl}`)));
-  }
 
   // log
   const lg = h('div', { class: 'box' }, h('h3', {}, 'Cronaca'), h('div', { class: 'log', id: 'log' }, g.log.map((l) => h('div', {}, l))));
   side.append(lg); const L = $('#log'); L.scrollTop = L.scrollHeight;
+  const prevB = g.lastBattle;
+  if (prevB) {
+    const TN = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
+    side.append(h('details', { class: 'box prev' }, h('summary', {}, 'Ultimo scontro'),
+      h('div', {}, `${prevB.by}: ${TN[prevB.from]} → ${TN[prevB.to]}`), h('div', { class: 'dice' }, prevB.att.map((d) => h('span', { class: 'a' }, FACES[d - 1])), h('i', {}, 'vs'), prevB.def.map((d) => h('span', { class: 'd' }, FACES[d - 1]))),
+      h('div', { class: 'mut' }, `Perdite: attaccante ${prevB.al}, difensore ${prevB.dl}`)));
+  }
 
   // uscita
   side.append(h('div', { class: 'btns' },
@@ -316,6 +335,58 @@ function renderGame(g) {
       : h('button', { onclick: () => confirm('Abbandonare la partita? I tuoi territori diventeranno neutrali.') && send({ type: 'leaveGame' }) }, 'Abbandona'),
     g.hostId === S.me.id && g.status !== 'finished' && h('button', { class: 'danger', onclick: () => confirm('Annullare la partita per tutti?') && send({ type: 'cancelGame' }) }, 'Annulla partita')));
   renderHand(g);
+}
+
+// ---------- sezione "Turno attuale": il turno in corso, passo dopo passo ----------
+function die(d, cls, extra) { return h('span', { class: `die ${cls}${extra ? ' ' + extra : ''}` }, FACES[d - 1]); }
+function blankDice(n, cls) { return Array.from({ length: n }, () => h('span', { class: `die blank ${cls}` }, '?')); }
+
+function turnBox(g) {
+  const cp = g.players[g.turn], log = g.turnLog || [];
+  const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
+  const box = h('div', { class: 'box turnbox' }, h('h3', {}, `Turno attuale · ${cp.name}`));
+  if (!log.length) { box.append(h('div', { class: 'mut' }, 'Nessuna azione ancora.')); return box; }
+  const lastAtk = [...log].reverse().find((e) => e.t === 'attack');
+  const feed = h('div', { class: 'feed', id: 'feed' });
+  for (const e of log) {
+    if (e === lastAtk) { feed.append(liveBattle(g, e, cp, T)); continue; }
+    const row = h('div', { class: 'ev ' + e.t });
+    if (e.t === 'start') row.append(`▸ Rinforzi: ${e.pool} ${e.pool === 1 ? 'armata' : 'armate'}`);
+    else if (e.t === 'place') row.append(`▸ ${e.n} ${e.n === 1 ? 'armata' : 'armate'} in ${T[e.terr]}`);
+    else if (e.t === 'trade') row.append(`🂠 Tris giocato: +${e.n} armate`);
+    else if (e.t === 'move') row.append(`➜ ${e.n} armate spostate in ${T[e.to]}`);
+    else if (e.t === 'fortify') row.append(`➜ Spostamento strategico: ${e.n} da ${T[e.from]} a ${T[e.to]}`);
+    else if (e.t === 'attack') {
+      row.append(`⚔ ${T[e.from]} → ${T[e.to]} `, h('span', { class: 'mini' }, (e.att || []).map((d) => die(d, 'a', 's')), ' ', (e.def || []).map((d) => die(d, 'd', 's'))),
+        ` −${e.al}/−${e.dl}`, e.conquered ? ' 🏴' : '');
+    }
+    feed.append(row);
+  }
+  box.append(feed);
+  requestAnimationFrame(() => { const f = $('#feed'); if (f) f.scrollTop = f.scrollHeight; });
+  return box;
+}
+
+// L'attacco più recente, in grande: dadi dell'attaccante, poi quelli del difensore, poi il risultato.
+function liveBattle(g, e, cp, T) {
+  const live = stage && stage.id === e.id ? stage.step : null;           // 1: solo attaccante, 2: anche difensore
+  const showAtt = e.done && (live === null || live >= 1), showDef = e.done && (live === null || live >= 2);
+  const blk = h('div', { class: 'live' });
+  blk.append(h('div', { class: 'livehead' }, h('b', {}, `${T[e.from]} → ${T[e.to]}`)),
+    h('div', { class: 'mut small' }, `${cp.name} attacca con ${e.dice} ${e.dice === 1 ? 'dado' : 'dadi'}${e.defender ? ` · ${e.defender} si difende` : ' · territorio neutrale'}`));
+  const n = Math.min(e.att ? e.att.length : e.dice, e.def ? e.def.length : 99);
+  const cmp = (arr, other, att) => arr.map((d, i) => die(d, att ? 'a' : 'd', i < n ? ((att ? d > other[i] : other[i] <= d) ? 'win' : 'lose') + (live === (att ? 1 : 2) ? ' rolling' : '') : (live === (att ? 1 : 2) ? 'rolling' : '')));
+  const attRow = h('div', { class: 'dicerow' }, h('span', { class: 'who a' }, 'Attacco'),
+    showAtt ? (showDef ? cmp(e.att, e.def, true) : e.att.map((d) => die(d, 'a', 'rolling'))) : blankDice(e.dice, 'a'));
+  let defContent;
+  if (showDef) defContent = cmp(e.def, e.att, false);
+  else if (e.done) defContent = blankDice(e.def.length, 'd');          // il difensore ha scelto: i suoi dadi stanno per uscire
+  else defContent = [h('span', { class: 'wait' }, g.phase === 'defend' ? `${e.defender || 'il difensore'} sta scegliendo i dadi…` : '—')];
+  blk.append(attRow, h('div', { class: 'dicerow' }, h('span', { class: 'who d' }, 'Difesa'), defContent));
+  if (showDef) {
+    blk.append(h('div', { class: 'result' }, `Attaccante −${e.al} · Difensore −${e.dl}`, e.conquered ? h('b', { class: 'conq' }, ` · 🏴 ${T[e.to]} conquistato!`) : ''));
+  } else if (!e.done) blk.append(h('div', { class: 'mut small' }, 'I dadi si tirano quando il difensore ha dichiarato i suoi.'));
+  return blk;
 }
 
 function hint(g, mine, cp) {
