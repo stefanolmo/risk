@@ -296,12 +296,19 @@ function renderGame(g) {
 
 
   // ultimo scontro
+  function diceRows(b) { // attaccante sopra, difensore sotto; si confrontano i dadi in coppia (a parità vince il difensore)
+    const n = Math.min(b.att.length, b.def.length);
+    const die = (d, cls, win) => h('span', { class: `die ${cls}${win === undefined ? '' : win ? ' win' : ' lose'}` }, FACES[d - 1]);
+    return h('div', { class: 'dicerows' },
+      h('div', { class: 'dicerow' }, h('span', { class: 'who a' }, 'Attacco'), b.att.map((d, i) => die(d, 'a', i < n ? d > b.def[i] : undefined))),
+      h('div', { class: 'dicerow' }, h('span', { class: 'who d' }, 'Difesa'), b.def.map((d, i) => die(d, 'd', i < n ? b.att[i] <= d : undefined))));
+  }
   const b = g.lastBattle;
   if (b) {
     const T = Object.fromEntries(MAP.territories.map((t) => [t.id, t.name]));
     side.append(h('div', { class: 'box' }, h('h3', {}, 'Ultimo scontro'),
       h('div', {}, `${b.by}: ${T[b.from]} → ${T[b.to]}${b.rounds > 1 ? ` (${b.rounds} round)` : ''}`),
-      h('div', { class: 'dice' }, b.att.map((d) => h('span', { class: 'a' }, FACES[d - 1])), h('i', {}, 'vs'), b.def.map((d) => h('span', { class: 'd' }, FACES[d - 1]))),
+      diceRows(b),
       h('div', { class: 'mut' }, `Perdite: attaccante ${b.al}, difensore ${b.dl}`)));
   }
 
